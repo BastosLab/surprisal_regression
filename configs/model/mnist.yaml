@@ -1,0 +1,25 @@
+_target_: src.models.svi_module.SviLightningModule
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.1
+  patience: 10
+
+importance:
+  _target_: src.models.components.vae.VariationalAutoencoder
+  hidden_dim: 400
+  x_dim: 784
+  z_dim: 50
+
+# compile model for faster training with pytorch 2.0
+compile: false
+
+num_particles: 5
