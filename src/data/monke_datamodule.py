@@ -48,3 +48,75 @@ class MuaTimeseriesDataset(IterableDataset):
 
     def __len__(self):
         return self._num_elements
+
+class MuaMatDataModule(LightningDataModule):
+    def __init__(
+        self, data_dir: str, area: str,
+        train_val_test_split: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        batch_size: int=64, num_workers: int = 0, pin_memory: bool = False
+    ) -> None:
+        super().__init__()
+
+        self.save_hyperparameters(logger=False)
+        self.transforms = transforms.ToTensor()
+
+        self.data_train: Optional[Dataset] = None
+        self.data_val: Optional[Dataset] = None
+        self.data_test: Optional[Dataset] = None
+
+        self.batch_size_per_device = batch_size
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        if self.trainer is not None:
+            if self.hparams.batch_size % self.trainer.world_size != 0:
+                raise RuntimeError(
+                    f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
+                )
+            self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
+
+        if not self.data_train and not self.data_val and not self.data_test:
+            dataset = MuaTimeseriesDataset(self.hparams.data_dir,
+                                           self.hparams.area)
+            self.data_train, self.data_val, self.data_test = random_split(
+                dataset=dataset, lengths=self.hparams.train_val_test_split,
+                generator=torch.Generator().manual_seed(42),
+            )
+
+    def train_dataloader(self) -> DataLoader[Any]:
+        """Create and return the train dataloader.
+
+        :return: The train dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_train,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=True,
+        )
+
+    def val_dataloader(self) -> DataLoader[Any]:
+        """Create and return the validation dataloader.
+
+        :return: The validation dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_val,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
+
+    def test_dataloader(self) -> DataLoader[Any]:
+        """Create and return the test dataloader.
+
+        :return: The test dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_test,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
