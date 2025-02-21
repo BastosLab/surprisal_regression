@@ -8,6 +8,51 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
 
+class MuaTimeseries:
+    def __init__(self, path):
+        raw = mat.loadmat(path, squeeze_me=True)['datastruct']
+        raw = dict(zip(raw.dtype.names, raw.item()))
+        self._possible_areas = [area.item() for area in
+                                raw['areas'][:, 0].tolist()]
+        self._muae = {k: v for k, v in zip(self._possible_areas,
+                                           raw['muae'][0, :].tolist())
+                      if len(v)}
+        self._session = raw['session'].item()
+        self._stim_info = raw['stim_info']
+        self._stim_times = raw['stim_times']
+        self._timestamps = {
+            k: v for (k, v) in zip(self._possible_areas,
+                                   raw['times_in_trial'][0, :].tolist())
+            if len(v)
+        }
+
+    @property
+    def areas(self):
+        return self._muae.keys()
+
+    def __len__(self):
+        return self.stim_info.shape[0]
+
+    @property
+    def muae(self):
+        return self._muae
+
+    @property
+    def session(self):
+        return self._session
+
+    @property
+    def stim_info(self):
+        return self._stim_info
+
+    @property
+    def stim_times(self):
+        return self._stim_times
+
+    @property
+    def timestamps(self):
+        return self._timestamps
+
 class MuaTimeseriesDataset(IterableDataset):
     def __init__(self, data_dir):
         super().__init__()
