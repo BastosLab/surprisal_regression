@@ -1,5 +1,6 @@
 import glob
 import hdf5storage as mat
+import numpy as np
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -54,42 +55,41 @@ class MuaTimeseries:
         return self._timestamps
 
 class MuaTimeseriesDataset(IterableDataset):
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, area):
         super().__init__()
-        self._files = glob.glob(data_dir + "/*.mat")
+        self._area = area
+        self._files = sorted(glob.glob(data_dir + "/*.mat"))
         self._num_elements = 0
+        self._session_timeseries = {}
+        self._element_locations = {}
         for path in self._files:
-            mua_info = mat.loadmat(path, squeeze_me=True)['datastruct']
-            mua_info = dict(zip(mua_info.dtype.names, mua_info.item()))
-            mua_info['areas']= [area.item() for area in
-                                mua_info['areas'][:, 0].tolist()]
-            mua_info['muae'] = dict(zip(mua_info['areas'],
-                                        mua_info['muae'][0, :].tolist()))
-            num_areas = sum([mua_info['muae'][area] is not None for area in
-                             mua_info['areas']])
-            num_trials = mua_info['stim_info'].shape[0]
-            self._num_elements += num_areas * num_trials
-            del mua_info
+            timeseries = MuaTimeseries(path)
+            if self.area in timeseries.muae.keys() and\
+               np.isfinite(timeseries.muae[self.area]).all():
+                self._session_timeseries[path] = timeseries
+                element_range = range(self._num_elements,
+                                      self._num_elements + len(timeseries))
+                self._element_locations[element_range] = path
+                self._num_elements += len(timeseries)
+
+    @property
+    def area(self):
+        return self._area
+
+    def __getitem__(self, idx):
+        for indices, path in self._element_locations.items():
+            if idx in indices:
+                idx -= indices.start
+                session = self._session_timeseries[path]
+                muae = session.muae[self.area][:, :, idx]
+                timestamps = session.timestamps[self.area]
+                stim_info = session.stim_info[idx, :, :]
+                stim_times = session.stim_times[idx, :, :]
+                return (muae, timestamps, stim_info, stim_times)
 
     def __iter__(self):
-        for path in self._files:
-            mua_info = mat.loadmat(path, squeeze_me=True)['datastruct']
-            mua_info = dict(zip(mua_info.dtype.names, mua_info.item()))
-            mua_info['areas']= [area.item() for area in
-                                mua_info['areas'][:, 0].tolist()]
-            mua_info['muae'] = dict(zip(mua_info['areas'],
-                                        mua_info['muae'][0, :].tolist()))
-            mua_info['session'] = mua_info['session'].item()
-            mua_info['times_in_trial'] = dict(zip(
-                mua_info['areas'], mua_info['times_in_trial'][0, :].tolist()
-            ))
-            for area in mua_info['areas']:
-                if len(mua_info['muae'][area]):
-                    for trial in range(mua_info['stim_info'].shape[0]):
-                        muae = mua_info['muae'][area][:, :, trial]
-                        times = mua_info['times_in_trial'][area]
-                        stim_info = mua_info['stim_info'][trial, :, :]
-                        yield (muae, times, stim_info, mua_info['stim_times'])
+        for i in range(len(self)):
+            yield self[i]
 
     def __len__(self):
         return self._num_elements
