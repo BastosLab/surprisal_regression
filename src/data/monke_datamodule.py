@@ -4,6 +4,7 @@ import numpy as np
 from typing import Any, Dict, Optional, Tuple
 
 import torch
+import torch.nn.functional as F
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset, IterableDataset, random_split
 from torchvision.datasets import MNIST
@@ -94,6 +95,53 @@ class MuaTimeseriesDataset(IterableDataset):
     def __len__(self):
         return self._num_elements
 
+class MuaPresentationDataset(IterableDataset):
+    def __init__(self, data_dir, area):
+        super().__init__()
+        self._timeseries = MuaTimeseriesDataset(data_dir, area)
+
+    def __getitem__(self, idx):
+        muae, timestamps, stim_info, stim_times = self._timeseries[idx]
+        stim_muae = []
+        for s in range(1, 5):
+            start, end = stim_times[s, 0], stim_times[s, 1]
+            start = np.nanargmin(np.abs(timestamps - start))
+            end = np.nanargmin(np.abs(timestamps - end))
+            stim_muae.append(muae[:, start:end+1].mean(axis=-1))
+        # stim_info[:, 0] \in {0, 1, 2} for non-oddball, local, global
+        # stim_info[:, 1] = grating orientation in degrees
+        # stim_info[:, 2] \in {1, 2, 3} for main, random control, seq control
+        # stim_info[:, 3] = conditional surprisal of this stimulus
+        # stim_info[:, 4] = marginal surprisal of this stimulus
+        # stim_info[:, 5] = cumulative conditional surprisal of this stimulus
+        # stim_info[:, 6] = cumulative marginal surprisal of this stimulus
+        oddballs = F.one_hot(torch.tensor(stim_info[:, 0], dtype=torch.long),
+                             3).numpy()
+        orientations = (stim_info[:, 1] == 135.).astype(int)
+        orientations = F.one_hot(torch.tensor(orientations, dtype=torch.long),
+                                 2).numpy()
+        adaptation = []
+        for p in range(0, 4):
+            repeats = orientations == orientations[p, :]
+            adaptation.append(repeats[:p].sum())
+        adaptation = np.array(adaptation)[:, np.newaxis]
+
+        blocks = F.one_hot(torch.tensor(stim_info[:, 2] - 1, dtype=torch.long),
+                           3).numpy()
+        surprisals = stim_info[:, 3:]
+
+        muae = np.stack(stim_muae, axis=0).astype(float)
+        regressors = np.concatenate((oddballs, orientations, adaptation, blocks,
+                                     surprisals), axis=-1)
+        return muae, regressors
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def __len__(self):
+        return len(self._timeseries)
+
 class MuaMatDataModule(LightningDataModule):
     def __init__(
         self, data_dir: str, area: str,
@@ -120,8 +168,8 @@ class MuaMatDataModule(LightningDataModule):
             self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
 
         if not self.data_train and not self.data_val and not self.data_test:
-            dataset = MuaTimeseriesDataset(self.hparams.data_dir,
-                                           self.hparams.area)
+            dataset = MuaPresentationDataset(self.hparams.data_dir,
+                                             self.hparams.area)
             self.data_train, self.data_val, self.data_test = random_split(
                 dataset=dataset, lengths=self.hparams.train_val_test_split,
                 generator=torch.Generator().manual_seed(42),
