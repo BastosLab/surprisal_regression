@@ -1,0 +1,5 @@
+_target_: src.data.monke_datamodule.MuaMatDataModule
+data_dir: "/mnt/data/surprisal_coding/epoched/"
+batch_size: 128 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+num_workers: 0
+pin_memory: False
