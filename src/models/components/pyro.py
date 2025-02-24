@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import math
 import pyro
 import pyro.nn as pnn
 from torch import nn
@@ -23,3 +24,6 @@ class PyroModel(pnn.PyroModule):
     @abstractmethod
     def model(self, *args, **kwargs):
         raise NotImplementedError
+
+def log_marginal(log_weights, dim=0):
+    return log_weights.logsumexp(dim=dim) - math.log(log_weights.shape[dim])
