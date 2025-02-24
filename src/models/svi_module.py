@@ -82,7 +82,7 @@ class SviLightningModule(LightningModule):
         :param x: A tensor of images.
         :return: A tensor of reconstructions.
         """
-        return self.importance(*args, **kwargs)[0]
+        return self.importance(*args, **kwargs)
 
     def on_train_start(self) -> None:
         """Lightning hook that is called when training begins."""
@@ -108,8 +108,8 @@ class SviLightningModule(LightningModule):
 
         with torch.no_grad():
             with pyro.plate_stack("recons", (P, xs.shape[0])):
-                reconstructions = self.forward(xs)
-        return loss, reconstructions
+                recons, _, log_weights = self.forward(xs)
+        return loss, recons, log_weights
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -121,11 +121,13 @@ class SviLightningModule(LightningModule):
         :param batch_idx: The index of the current batch.
         :return: A tensor of losses between model predictions and targets.
         """
-        loss, recons = self.model_step(batch)
+        loss, recons, log_weights = self.model_step(batch)
 
         # update and log metrics
         self.train_loss(loss)
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train/log_evidence", base.log_marginal(log_weights).sum().item(),
+                 on_step=False, on_epoch=True, prog_bar=True)
 
         # return loss or backpropagation will fail
         return loss
@@ -137,11 +139,13 @@ class SviLightningModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, recons = self.model_step(batch)
+        loss, recons, log_weights = self.model_step(batch)
 
         # update and log metrics
         self.val_loss(loss)
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val/log_evidence", base.log_marginal(log_weights).sum().item(),
+                 on_step=False, on_epoch=True, prog_bar=True)
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Perform a single test step on a batch of data from the test set.
@@ -150,11 +154,13 @@ class SviLightningModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, recons = self.model_step(batch)
+        loss, recons, log_weights = self.model_step(batch)
 
         # update and log metrics
         self.test_loss(loss)
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("test/log_evidence", base.log_marginal(log_weights).sum().item(),
+                 on_step=False, on_epoch=True, prog_bar=True)
 
     def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
