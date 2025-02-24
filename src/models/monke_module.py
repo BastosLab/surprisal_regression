@@ -23,5 +23,5 @@ class MonkeLightningModule(SviLightningModule):
 
         with torch.no_grad():
             with pyro.plate_stack("predictions", (P, muae.shape[0])):
-                predictions = self.forward(muae, regressors)
-        return loss, predictions
+                predictions, _, log_weights = self.forward(muae, regressors)
+        return loss, predictions, log_weights
