@@ -76,13 +76,13 @@ class SviLightningModule(LightningModule):
         self.val_loss = MeanMetric()
         self.test_loss = MeanMetric()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, *args, **kwargs) -> torch.Tensor:
         """Perform a forward pass through the model `self.importance`.
 
         :param x: A tensor of images.
         :return: A tensor of reconstructions.
         """
-        return self.importance(x)[0]
+        return self.importance(*args, **kwargs)[0]
 
     def on_train_start(self) -> None:
         """Lightning hook that is called when training begins."""
