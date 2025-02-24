@@ -107,7 +107,9 @@ class MuaPresentationDataset(IterableDataset):
             start, end = stim_times[s, 0], stim_times[s, 1]
             start = np.nanargmin(np.abs(timestamps - start))
             end = np.nanargmin(np.abs(timestamps - end))
-            stim_muae.append(muae[:, start:end+1].mean(axis=-1))
+            stim_avg = muae[:, start:end+1].mean(axis=-1).mean(axis=0,
+                                                               keepdims=True)
+            stim_muae.append(stim_avg)
         # stim_info[:, 0] \in {0, 1, 2} for non-oddball, local, global
         # stim_info[:, 1] = grating orientation in degrees
         # stim_info[:, 2] \in {1, 2, 3} for main, random control, seq control

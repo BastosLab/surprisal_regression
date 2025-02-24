@@ -15,7 +15,6 @@ scheduler:
 
 importance:
   _target_: src.models.components.linear_regression.TrialwiseLinearRegression
-  num_channels: 32
   num_regressors: 13
   num_stimuli: 4
 # compile model for faster training with pytorch 2.0
