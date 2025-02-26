@@ -1,5 +1,6 @@
 import pyro
 import pyro.distributions as dist
+import pyro.nn as pnn
 import torch
 from torch import nn
 
@@ -16,24 +17,28 @@ class TrialwiseLinearRegression(base.PyroModel):
         self.log_scale = nn.Parameter(torch.tensor(0.))
 
         if "adaptation" not in self.ablations:
-            self.adaptation_q_loc = nn.Parameter(torch.zeros(1))
-            self.adaptation_q_log_scale = nn.Parameter(torch.zeros(1))
+            self.adaptation_q_loc = pnn.PyroParam(torch.zeros(1))
+            self.adaptation_q_log_scale = pnn.PyroParam(torch.zeros(1))
 
-            self.adaptation_p_loc = nn.Parameter(torch.zeros(1))
-            self.adaptation_p_log_scale = nn.Parameter(torch.zeros(1))
+            self.adaptation_p_loc = pnn.PyroParam(torch.zeros(1))
+            self.adaptation_p_log_scale = pnn.PyroParam(torch.zeros(1))
         self.baseline_params = nn.Sequential(
             nn.Linear(num_regressors + 1, hidden_dims), nn.SiLU(),
             nn.Linear(hidden_dims, 2)
         )
-        self.block_alpha = nn.Parameter(torch.ones(3))
-        self.oddball_alpha = nn.Parameter(torch.ones(3))
-        self.orientation_alpha = nn.Parameter(torch.ones(2))
-        if "surprise" not in self.ablations:
-            self.surprise_q_loc = nn.Parameter(torch.zeros(4))
-            self.surprise_q_log_scale = nn.Parameter(torch.zeros(4))
 
-            self.surprise_p_loc = nn.Parameter(torch.zeros(4))
-            self.surprise_p_log_scale = nn.Parameter(torch.zeros(4))
+        self.block_alpha = pnn.PyroParam(torch.ones(3),
+                                         constraint=dist.constraints.simplex)
+        self.oddball_alpha = pnn.PyroParam(torch.ones(3),
+                                           constraint=dist.constraints.simplex)
+        self.orientation_alpha = pnn.PyroParam(torch.ones(2),
+                                               constraint=dist.constraints.simplex)
+        if "surprise" not in self.ablations:
+            self.surprise_q_loc = pnn.PyroParam(torch.zeros(4))
+            self.surprise_q_log_scale = pnn.PyroParam(torch.zeros(4))
+
+            self.surprise_p_loc = pnn.PyroParam(torch.zeros(4))
+            self.surprise_p_log_scale = pnn.PyroParam(torch.zeros(4))
 
     @property
     def ablations(self):
