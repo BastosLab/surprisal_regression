@@ -146,6 +146,37 @@ class MuaPresentationDataset(IterableDataset):
     def __len__(self):
         return len(self._timeseries)
 
+class SyntheticMuaDataset(IterableDataset):
+    def __init__(self, mat_path):
+        super().__init__()
+        self._regressors, self._samples = torch.load(mat_path)
+
+    def __getitem__(self, idx):
+        if idx < len(self._samples["lo"]):
+            kind = "lo"
+            r = 0
+        elif idx < 2 * len(self._samples["lo"]):
+            idx -= len(self._samples["lo"])
+            kind = "go"
+            r = 1
+        elif idx < 3 * len(self._samples["lo"]):
+            idx -= 2 * len(self._samples["lo"])
+            kind = "rndctrl"
+            r = 2
+        elif idx < 4 * len(self._samples["lo"]):
+            idx -= 3 * len(self._samples["lo"])
+            kind = "seqctrl"
+            r = 3
+
+        return self._samples[kind][idx, :, :], self._regressors[r, :, :]
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def __len__(self):
+        return sum(len(self._samples[type]) for type in self._samples.keys())
+
 class MuaMatDataModule(LightningDataModule):
     def __init__(
         self, data_dir: str, area: str,
