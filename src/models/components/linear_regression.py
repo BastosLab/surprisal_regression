@@ -45,41 +45,40 @@ class TrialwiseLinearRegression(base.PyroModel):
         return self._ablations
 
     def guide(self, muae, regressors):
+        B = muae.shape[0]
         data = torch.cat((muae, regressors), dim=-1)
 
-        alpha = self.oddball_alpha.expand(muae.shape[1], 3)
-        oddball = pyro.sample("oddball?", dist.Dirichlet(alpha).to_event(1))
-
-        alpha = self.orientation_alpha.expand(muae.shape[1], 2)
-        orientation = pyro.sample("orientation",
-                                  dist.Dirichlet(alpha).to_event(1))
+        alpha = self.oddball_alpha.expand(B, 3)
+        oddball = pyro.sample("oddball?", dist.Dirichlet(alpha))
+        alpha = self.orientation_alpha.expand(B, 2)
+        orientation = pyro.sample("orientation", dist.Dirichlet(alpha))
 
         if "adaptation" in self.ablations:
             adaptation = data.new_zeros(torch.Size((orientation.shape[0],
                                                     *muae.shape, 1)))
         else:
-            loc = self.adaptation_q_loc.expand(muae.shape[1], 1)
-            log_scale = self.adaptation_q_log_scale.expand(muae.shape[1], 1)
-            adaptation_dist = dist.LogNormal(loc, log_scale.exp())
-            adaptation = pyro.sample("adaptation", adaptation_dist.to_event(2))
+            loc = self.adaptation_q_loc.expand(B, 1)
+            log_scale = self.adaptation_q_log_scale.expand(B, 1)
+            adaptation_dist = dist.LogNormal(loc, log_scale.exp()).to_event(1)
+            adaptation = pyro.sample("adaptation", adaptation_dist)
 
-        alpha = self.block_alpha.expand(muae.shape[1], 3)
-        block = pyro.sample("block", dist.Dirichlet(alpha).to_event(1))
+        alpha = self.block_alpha.expand(B, 3)
+        block = pyro.sample("block", dist.Dirichlet(alpha))
 
         if "surprise" in self.ablations:
             surprise = data.new_zeros(torch.Size((block.shape[0],
                                                   *muae.shape[:2], 4)))
         else:
-            loc = self.surprise_q_loc.expand(muae.shape[1], 4)
-            log_scale = self.surprise_q_log_scale.expand(muae.shape[1], 4)
-            surprise = pyro.sample("surprise",
-                                   dist.LogNormal(loc,
-                                                  log_scale.exp()).to_event(2))
+            loc = self.surprise_q_loc.expand(B, 4)
+            log_scale = self.surprise_q_log_scale.expand(B, 4)
+            surprise = pyro.sample("surprise", dist.LogNormal(
+                loc, log_scale.exp()
+            ).to_event(1))
 
-        loc, log_scale = self.baseline_params(data).unbind(dim=-1)
+        loc, log_scale = self.baseline_params(data).mean(dim=1).unbind(dim=-1)
         baseline = pyro.sample("baseline", dist.Normal(
             loc.unsqueeze(dim=-1), log_scale.exp().unsqueeze(dim=-1)
-        ).to_event(2))
+        ).to_event(1))
 
     def model(self, muae, regressors):
         # regressors[:, 0:2] = one-hot for oddball status
@@ -87,48 +86,49 @@ class TrialwiseLinearRegression(base.PyroModel):
         # regressors[:, 5] = stimulus repetition count up to current stimulus
         # regressors[:, 6:8] = one-hot for main, random control, seq control
         # regressors[:, 9:12] = surprisals
-        concentration = muae.new_ones(torch.Size((*muae.shape[:2], 3)))
-        oddball = pyro.sample("oddball?",
-                              dist.Dirichlet(concentration).to_event(1))
+        B = muae.shape[0]
+        concentration = muae.new_ones(torch.Size((B, 3)))
+        oddball = pyro.sample("oddball?", dist.Dirichlet(concentration))
 
-        concentration = muae.new_ones(torch.Size((*muae.shape[:2], 2)))
-        orientation = pyro.sample("orientation",
-                                  dist.Dirichlet(concentration).to_event(1))
+        concentration = muae.new_ones(torch.Size((B, 2)))
+        orientation = pyro.sample("orientation", dist.Dirichlet(concentration))
 
         if "adaptation" in self.ablations:
             adaptation = muae.new_zeros(torch.Size((oddball.shape[0],
-                                                    *muae.shape[:2], 1)))
+                                                    *muae.shape[:1], 1)))
         else:
-            loc = self.adaptation_p_loc.expand(*muae.shape[:2], 1)
-            log_scale = self.adaptation_p_log_scale.expand(*muae.shape[:2], 1)
+            loc = self.adaptation_p_loc.expand(B, 1)
+            log_scale = self.adaptation_p_log_scale.expand(B, 1)
             adaptation = pyro.sample("adaptation", dist.LogNormal(
                 loc, log_scale.exp()
-            ).to_event(2))
+            ).to_event(1))
 
-        concentration = muae.new_ones(torch.Size((*muae.shape[:2], 3)))
-        block = pyro.sample("block", dist.Dirichlet(concentration).to_event(1))
+        concentration = muae.new_ones(torch.Size((B, 3)))
+        block = pyro.sample("block", dist.Dirichlet(concentration))
 
         if "surprise" in self.ablations:
             surprise = muae.new_zeros(torch.Size((oddball.shape[0],
-                                                  *muae.shape[:2], 4)))
+                                                  *muae.shape[:1], 4)))
         else:
-            loc = self.surprise_p_loc.expand(*muae.shape[:2], 4)
-            scale = self.surprise_p_log_scale.expand(*muae.shape[:2], 4).exp()
-            surprise = pyro.sample("surprise",
-                                   dist.LogNormal(loc, scale).to_event(2))
+            loc = self.surprise_p_loc.expand(B, 4)
+            log_scale = self.surprise_p_log_scale.expand(B, 4)
+            surprise = pyro.sample("surprise", dist.LogNormal(
+                loc, log_scale.exp()
+            ).to_event(1))
 
-        loc = muae.new_zeros(torch.Size((*muae.shape[:2], 1)))
-        scale = muae.new_ones(torch.Size((*muae.shape[:2], 1)))
-        baseline = pyro.sample("baseline", dist.Normal(loc, scale).to_event(2))
+        loc = muae.new_zeros(torch.Size((B, 1,)))
+        scale = muae.new_ones(torch.Size((B, 1,)))
+        baseline = pyro.sample("baseline", dist.Normal(loc, scale).to_event(1))
+        baseline = baseline.unsqueeze(-2).expand(*baseline.shape[:2], 4, 1)
 
         coefficients = torch.cat((oddball, orientation, -adaptation, block,
                                   surprise), dim=-1)
-        regressors = regressors.unsqueeze(dim=0).expand(coefficients.shape[0],
-                                                        *regressors.shape)
+        regressors = regressors.expand(coefficients.shape[0], *regressors.shape)
+        coefficients = coefficients.unsqueeze(-2).expand(*regressors.shape)
         predictions = torch.linalg.vecdot(coefficients, regressors)
         predictions = predictions.unsqueeze(dim=-1) + baseline
         pyro.sample("MUAe", dist.Normal(predictions,
                                         self.log_scale.exp()).to_event(2),
-                    obs=muae)
+                    obs=muae.unsqueeze(dim=0))
 
         return predictions

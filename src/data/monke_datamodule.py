@@ -10,8 +10,13 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
 
+from src.utils import RankedLogger
+
+log = RankedLogger(__name__, rank_zero_only=True)
+
 class MuaTimeseries:
     def __init__(self, path):
+        log.info("Loading MUAe timeseries from %s" % path)
         raw = mat.loadmat(path, squeeze_me=True)['datastruct']
         raw = dict(zip(raw.dtype.names, raw.item()))
         self._possible_areas = [area.item() for area in
@@ -122,11 +127,14 @@ class MuaPresentationDataset(IterableDataset):
         orientations = (stim_info[:, 1] == 135.).astype(int)
         orientations = F.one_hot(torch.tensor(orientations, dtype=torch.long),
                                  2).numpy()
-        adaptation = []
-        for p in range(0, 4):
-            repeats = orientations == orientations[p, :]
-            adaptation.append(repeats[:p].sum())
-        adaptation = np.array(adaptation)[:, np.newaxis]
+        adaptation = np.zeros(4)
+        for p in range(1, 4):
+            repeats = 0
+            last = p - 1
+            while last >= 0 and (orientations[last, :] == orientations[p, :]).all():
+                adaptation[p] += 1
+                last = last - 1
+        adaptation = adaptation[:, np.newaxis]
 
         blocks = F.one_hot(torch.tensor(stim_info[:, 2] - 1, dtype=torch.long),
                            3).numpy()
