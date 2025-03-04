@@ -14,7 +14,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         self._num_regressors = num_regressors
         self._num_stimuli = num_stimuli
 
-        self.log_scale = nn.Parameter(torch.tensor(0.))
+        self.log_scale = pnn.PyroParam(torch.tensor(0.))
 
         if "adaptation" not in self.ablations:
             self.adaptation_q_loc = pnn.PyroParam(torch.zeros(1))
