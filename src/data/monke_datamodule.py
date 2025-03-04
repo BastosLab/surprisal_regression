@@ -127,11 +127,14 @@ class MuaPresentationDataset(IterableDataset):
         orientations = (stim_info[:, 1] == 135.).astype(int)
         orientations = F.one_hot(torch.tensor(orientations, dtype=torch.long),
                                  2).numpy()
-        adaptation = []
-        for p in range(0, 4):
-            repeats = orientations == orientations[p, :]
-            adaptation.append(repeats[:p].sum())
-        adaptation = np.array(adaptation)[:, np.newaxis]
+        adaptation = np.zeros(4)
+        for p in range(1, 4):
+            repeats = 0
+            last = p - 1
+            while last >= 0 and (orientations[last, :] == orientations[p, :]).all():
+                adaptation[p] += 1
+                last = last - 1
+        adaptation = adaptation[:, np.newaxis]
 
         blocks = F.one_hot(torch.tensor(stim_info[:, 2] - 1, dtype=torch.long),
                            3).numpy()
