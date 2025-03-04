@@ -10,8 +10,13 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
 
+from src.utils import RankedLogger
+
+log = RankedLogger(__name__, rank_zero_only=True)
+
 class MuaTimeseries:
     def __init__(self, path):
+        log.info("Loading MUAe timeseries from %s" % path)
         raw = mat.loadmat(path, squeeze_me=True)['datastruct']
         raw = dict(zip(raw.dtype.names, raw.item()))
         self._possible_areas = [area.item() for area in
