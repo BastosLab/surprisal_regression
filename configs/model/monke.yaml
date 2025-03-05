@@ -3,7 +3,7 @@ _target_: src.models.monke_module.MonkeLightningModule
 optimizer:
   _target_: torch.optim.Adam
   _partial_: true
-  lr: 0.001
+  lr: 1e-4
   weight_decay: 0.0
 
 scheduler:
