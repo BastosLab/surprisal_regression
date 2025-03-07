@@ -24,6 +24,8 @@ class TrialwiseLinearRegression(base.PyroModel):
             nn.Linear(num_regressors + 1, hidden_dims), nn.SiLU(),
             nn.Linear(hidden_dims, 2)
         )
+        self.baseline_p_loc = pnn.PyroParam(torch.zeros(1))
+        self.baseline_p_log_scale = pnn.PyroParam(torch.zeros(1))
         self.log_scale = pnn.PyroParam(torch.tensor(0.))
 
         if "surprise" not in self.ablations:
@@ -85,9 +87,10 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.HalfNormal(log_scale.exp()).to_event(1))
 
-        loc = muae.new_zeros(torch.Size((B, 1,)))
-        scale = muae.new_ones(torch.Size((B, 1,)))
-        baseline = pyro.sample("baseline", dist.Normal(loc, scale).to_event(1))
+        loc = self.baseline_p_loc.expand(B, 1)
+        log_scale = self.baseline_p_log_scale.expand(B, 1)
+        baseline = pyro.sample("baseline",
+                               dist.Normal(loc, log_scale.exp()).to_event(1))
         baseline = baseline.unsqueeze(-2).expand(*baseline.shape[:2], 4, 1)
 
         coefficients = torch.cat((orientation, -adaptation, surprise), dim=-1)
