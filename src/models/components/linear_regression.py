@@ -27,6 +27,10 @@ class TrialwiseLinearRegression(base.PyroModel):
         self.baseline_p_loc = pnn.PyroParam(torch.zeros(1))
         self.baseline_p_log_scale = pnn.PyroParam(torch.zeros(1))
         self.log_scale = pnn.PyroParam(torch.tensor(0.))
+        self.selectivity_q_loc = pnn.PyroParam(torch.zeros(2))
+        self.selectivity_q_log_scale = pnn.PyroParam(torch.zeros(2))
+        self.selectivity_p_loc = pnn.PyroParam(torch.zeros(2))
+        self.selectivity_p_log_scale = pnn.PyroParam(torch.zeros(2))
 
         if "surprise" not in self.ablations:
             self.surprise_q_log_scale = pnn.PyroParam(torch.zeros(4))
@@ -43,6 +47,12 @@ class TrialwiseLinearRegression(base.PyroModel):
         alpha = self.angle_alpha.expand(B, 2)
         orientation = pyro.sample("orientation", dist.Dirichlet(alpha))
         P = orientation.shape[0]
+
+        loc = self.selectivity_q_loc.expand(B, 2)
+        log_scale = self.selectivity_q_log_scale.expand(B, 2)
+        selectivity = pyro.sample("selectivity", dist.Normal(
+            loc, log_scale.exp()
+        ).to_event(1))
 
         if "adaptation" in self.ablations:
             adaptation = data.new_zeros(torch.Size((P, B, 1)))
@@ -72,6 +82,12 @@ class TrialwiseLinearRegression(base.PyroModel):
         orientation = pyro.sample("orientation", dist.Dirichlet(concentration))
         P = orientation.shape[0]
 
+        loc = self.selectivity_p_loc.expand(B, 2)
+        log_scale = self.selectivity_p_log_scale.expand(B, 2)
+        selectivity = pyro.sample("selectivity", dist.Normal(
+            loc, log_scale.exp()
+        ).to_event(1))
+
         if "adaptation" in self.ablations:
             adaptation = regressors.new_zeros(torch.Size((P, B, 1)))
         else:
@@ -93,7 +109,8 @@ class TrialwiseLinearRegression(base.PyroModel):
                                dist.Normal(loc, log_scale.exp()).to_event(1))
         baseline = baseline.unsqueeze(-2).expand(*baseline.shape[:2], 4, 1)
 
-        coefficients = torch.cat((orientation, -adaptation, surprise), dim=-1)
+        coefficients = torch.cat((orientation * selectivity, -adaptation,
+                                  surprise), dim=-1)
         regressors = regressors.expand(coefficients.shape[0], *regressors.shape)
         coefficients = coefficients.unsqueeze(-2).expand(*regressors.shape)
         predictions = torch.linalg.vecdot(coefficients, regressors)
