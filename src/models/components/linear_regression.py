@@ -14,18 +14,18 @@ class TrialwiseLinearRegression(base.PyroModel):
         self._num_regressors = num_regressors
         self._num_stimuli = num_stimuli
 
-        self.log_scale = pnn.PyroParam(torch.tensor(0.))
-
         if "adaptation" not in self.ablations:
             self.adaptation_q_log_scale = pnn.PyroParam(torch.zeros(1))
             self.adaptation_p_log_scale = pnn.PyroParam(torch.zeros(1))
-        self.baseline_params = nn.Sequential(
+
+        self.angle_alpha = pnn.PyroParam(torch.ones(2),
+                                         constraint=dist.constraints.simplex)
+        self.baseline_q = nn.Sequential(
             nn.Linear(num_regressors + 1, hidden_dims), nn.SiLU(),
             nn.Linear(hidden_dims, 2)
         )
+        self.log_scale = pnn.PyroParam(torch.tensor(0.))
 
-        self.orientation_alpha = pnn.PyroParam(torch.ones(2),
-                                               constraint=dist.constraints.simplex)
         if "surprise" not in self.ablations:
             self.surprise_q_log_scale = pnn.PyroParam(torch.zeros(4))
             self.surprise_p_log_scale = pnn.PyroParam(torch.zeros(4))
@@ -38,7 +38,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         B = muae.shape[0]
         data = torch.cat((muae, regressors), dim=-1)
 
-        alpha = self.orientation_alpha.expand(B, 2)
+        alpha = self.angle_alpha.expand(B, 2)
         orientation = pyro.sample("orientation", dist.Dirichlet(alpha))
         P = orientation.shape[0]
 
@@ -56,7 +56,7 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.HalfNormal(log_scale.exp()).to_event(1))
 
-        loc, log_scale = self.baseline_params(data).mean(dim=1).unbind(dim=-1)
+        loc, log_scale = self.baseline_q(data).mean(dim=1).unbind(dim=-1)
         baseline = pyro.sample("baseline", dist.Normal(
             loc.unsqueeze(dim=-1), log_scale.exp().unsqueeze(dim=-1)
         ).to_event(1))
