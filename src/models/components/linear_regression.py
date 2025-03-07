@@ -17,10 +17,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         self.log_scale = pnn.PyroParam(torch.tensor(0.))
 
         if "adaptation" not in self.ablations:
-            self.adaptation_q_loc = pnn.PyroParam(torch.zeros(1))
             self.adaptation_q_log_scale = pnn.PyroParam(torch.zeros(1))
-
-            self.adaptation_p_loc = pnn.PyroParam(torch.zeros(1))
             self.adaptation_p_log_scale = pnn.PyroParam(torch.zeros(1))
         self.baseline_params = nn.Sequential(
             nn.Linear(num_regressors + 1, hidden_dims), nn.SiLU(),
@@ -34,10 +31,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         self.orientation_alpha = pnn.PyroParam(torch.ones(2),
                                                constraint=dist.constraints.simplex)
         if "surprise" not in self.ablations:
-            self.surprise_q_loc = pnn.PyroParam(torch.zeros(4))
             self.surprise_q_log_scale = pnn.PyroParam(torch.zeros(4))
-
-            self.surprise_p_loc = pnn.PyroParam(torch.zeros(4))
             self.surprise_p_log_scale = pnn.PyroParam(torch.zeros(4))
 
     @property
@@ -57,9 +51,8 @@ class TrialwiseLinearRegression(base.PyroModel):
             adaptation = data.new_zeros(torch.Size((orientation.shape[0],
                                                     *muae.shape, 1)))
         else:
-            loc = self.adaptation_q_loc.expand(B, 1)
             log_scale = self.adaptation_q_log_scale.expand(B, 1)
-            adaptation_dist = dist.LogNormal(loc, log_scale.exp()).to_event(1)
+            adaptation_dist = dist.HalfNormal(log_scale.exp()).to_event(1)
             adaptation = pyro.sample("adaptation", adaptation_dist)
 
         alpha = self.block_alpha.expand(B, 3)
@@ -69,11 +62,9 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = data.new_zeros(torch.Size((block.shape[0],
                                                   *muae.shape[:2], 4)))
         else:
-            loc = self.surprise_q_loc.expand(B, 4)
             log_scale = self.surprise_q_log_scale.expand(B, 4)
-            surprise = pyro.sample("surprise", dist.LogNormal(
-                loc, log_scale.exp()
-            ).to_event(1))
+            surprise = pyro.sample("surprise",
+                                   dist.HalfNormal(log_scale.exp()).to_event(1))
 
         loc, log_scale = self.baseline_params(data).mean(dim=1).unbind(dim=-1)
         baseline = pyro.sample("baseline", dist.Normal(
@@ -97,10 +88,9 @@ class TrialwiseLinearRegression(base.PyroModel):
             adaptation = muae.new_zeros(torch.Size((oddball.shape[0],
                                                     *muae.shape[:1], 1)))
         else:
-            loc = self.adaptation_p_loc.expand(B, 1)
             log_scale = self.adaptation_p_log_scale.expand(B, 1)
-            adaptation = pyro.sample("adaptation", dist.LogNormal(
-                loc, log_scale.exp()
+            adaptation = pyro.sample("adaptation", dist.HalfNormal(
+                log_scale.exp()
             ).to_event(1))
 
         concentration = muae.new_ones(torch.Size((B, 3)))
@@ -110,11 +100,9 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = muae.new_zeros(torch.Size((oddball.shape[0],
                                                   *muae.shape[:1], 4)))
         else:
-            loc = self.surprise_p_loc.expand(B, 4)
             log_scale = self.surprise_p_log_scale.expand(B, 4)
-            surprise = pyro.sample("surprise", dist.LogNormal(
-                loc, log_scale.exp()
-            ).to_event(1))
+            surprise = pyro.sample("surprise",
+                                   dist.HalfNormal(log_scale.exp()).to_event(1))
 
         loc = muae.new_zeros(torch.Size((B, 1,)))
         scale = muae.new_ones(torch.Size((B, 1,)))
