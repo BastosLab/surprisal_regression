@@ -122,27 +122,21 @@ class MuaPresentationDataset(IterableDataset):
         # stim_info[:, 4] = marginal surprisal of this stimulus
         # stim_info[:, 5] = cumulative conditional surprisal of this stimulus
         # stim_info[:, 6] = cumulative marginal surprisal of this stimulus
-        oddballs = F.one_hot(torch.tensor(stim_info[:, 0], dtype=torch.long),
-                             3).numpy()
-        orientations = (stim_info[:, 1] == 135.).astype(int)
-        orientations = F.one_hot(torch.tensor(orientations, dtype=torch.long),
-                                 2).numpy()
+        angles = (stim_info[:, 1] == 135.).astype(int)
+        angles = F.one_hot(torch.tensor(angles, dtype=torch.long), 2).numpy()
         adaptation = np.zeros(4)
         for p in range(1, 4):
             repeats = 0
             last = p - 1
-            while last >= 0 and (orientations[last, :] == orientations[p, :]).all():
+            while last >= 0 and (angles[last, :] == angles[p, :]).all():
                 adaptation[p] += 1
                 last = last - 1
         adaptation = adaptation[:, np.newaxis]
 
-        blocks = F.one_hot(torch.tensor(stim_info[:, 2] - 1, dtype=torch.long),
-                           3).numpy()
         surprisals = stim_info[:, 3:]
 
         muae = np.stack(stim_muae, axis=0).astype(float)
-        regressors = np.concatenate((oddballs, orientations, adaptation, blocks,
-                                     surprisals), axis=-1)
+        regressors = np.concatenate((angles, adaptation, surprisals), axis=-1)
         return muae, regressors
 
     def __iter__(self):
