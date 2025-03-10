@@ -26,7 +26,6 @@ class TrialwiseLinearRegression(base.PyroModel):
         )
         self.baseline_p_loc = pnn.PyroParam(torch.zeros(1))
         self.baseline_p_log_scale = pnn.PyroParam(torch.zeros(1))
-        self.log_scale = pnn.PyroParam(torch.tensor(0.))
         self.selectivity_q_loc = pnn.PyroParam(torch.zeros(2))
         self.selectivity_q_log_scale = pnn.PyroParam(torch.zeros(2))
         self.selectivity_p_loc = pnn.PyroParam(torch.zeros(2))
@@ -115,8 +114,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         coefficients = coefficients.unsqueeze(-2).expand(*regressors.shape)
         predictions = torch.linalg.vecdot(coefficients, regressors)
         predictions = predictions.unsqueeze(dim=-1) + baseline
-        pyro.sample("MUAe", dist.Normal(predictions,
-                                        self.log_scale.exp()).to_event(2),
+        pyro.sample("MUAe", dist.Normal(predictions, 0.1).to_event(2),
                     obs=muae.unsqueeze(dim=0))
 
         return predictions
