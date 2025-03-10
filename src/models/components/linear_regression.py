@@ -14,9 +14,11 @@ class TrialwiseLinearRegression(base.PyroModel):
         self._num_regressors = num_regressors
         self._num_stimuli = num_stimuli
 
-        if "adaptation" not in self.ablations:
-            self.adaptation_q_log_scale = pnn.PyroParam(torch.zeros(1))
-            self.adaptation_p_log_scale = pnn.PyroParam(torch.zeros(1))
+        if "repetition" not in self.ablations:
+            self.repetition_q_loc = pnn.PyroParam(torch.zeros(1))
+            self.repetition_q_log_scale = pnn.PyroParam(torch.zeros(1))
+            self.repetition_p_loc = pnn.PyroParam(torch.zeros(1))
+            self.repetition_p_log_scale = pnn.PyroParam(torch.zeros(1))
 
         self.angle_alpha = pnn.PyroParam(torch.ones(2),
                                          constraint=dist.constraints.simplex)
@@ -26,7 +28,6 @@ class TrialwiseLinearRegression(base.PyroModel):
         )
         self.baseline_p_loc = pnn.PyroParam(torch.zeros(1))
         self.baseline_p_log_scale = pnn.PyroParam(torch.zeros(1))
-        self.log_scale = pnn.PyroParam(torch.tensor(0.))
         self.selectivity_q_loc = pnn.PyroParam(torch.zeros(2))
         self.selectivity_q_log_scale = pnn.PyroParam(torch.zeros(2))
         self.selectivity_p_loc = pnn.PyroParam(torch.zeros(2))
@@ -54,12 +55,13 @@ class TrialwiseLinearRegression(base.PyroModel):
             loc, log_scale.exp()
         ).to_event(1))
 
-        if "adaptation" in self.ablations:
-            adaptation = data.new_zeros(torch.Size((P, B, 1)))
+        if "repetition" in self.ablations:
+            repetition = data.new_zeros(torch.Size((P, B, 1)))
         else:
-            log_scale = self.adaptation_q_log_scale.expand(B, 1)
-            adaptation_dist = dist.HalfNormal(log_scale.exp()).to_event(1)
-            adaptation = pyro.sample("adaptation", adaptation_dist)
+            loc = self.repetition_q_loc.expand(B, 1)
+            log_scale = self.repetition_q_log_scale.expand(B, 1)
+            repetition_dist = dist.Normal(loc, log_scale.exp()).to_event(1)
+            repetition = pyro.sample("repetition", repetition_dist)
 
         if "surprise" in self.ablations:
             surprise = data.new_zeros(torch.Size((P, B, 4)))
@@ -88,13 +90,14 @@ class TrialwiseLinearRegression(base.PyroModel):
             loc, log_scale.exp()
         ).to_event(1))
 
-        if "adaptation" in self.ablations:
-            adaptation = regressors.new_zeros(torch.Size((P, B, 1)))
+        if "repetition" in self.ablations:
+            repetition = regressors.new_zeros(torch.Size((P, B, 1)))
         else:
-            log_scale = self.adaptation_p_log_scale.expand(B, 1)
-            adaptation = pyro.sample("adaptation", dist.HalfNormal(
-                log_scale.exp()
-            ).to_event(1))
+            loc = self.repetition_p_loc.expand(B, 1)
+            log_scale = self.repetition_p_log_scale.expand(B, 1)
+            repetition = pyro.sample("repetition",
+                                     dist.Normal(loc,
+                                                 log_scale.exp()).to_event(1))
 
         if "surprise" in self.ablations:
             surprise = regressors.new_zeros(torch.Size((P, B, 4)))
@@ -109,14 +112,13 @@ class TrialwiseLinearRegression(base.PyroModel):
                                dist.Normal(loc, log_scale.exp()).to_event(1))
         baseline = baseline.unsqueeze(-2).expand(*baseline.shape[:2], 4, 1)
 
-        coefficients = torch.cat((orientation * selectivity, -adaptation,
+        coefficients = torch.cat((orientation * selectivity, repetition,
                                   surprise), dim=-1)
         regressors = regressors.expand(coefficients.shape[0], *regressors.shape)
         coefficients = coefficients.unsqueeze(-2).expand(*regressors.shape)
         predictions = torch.linalg.vecdot(coefficients, regressors)
         predictions = predictions.unsqueeze(dim=-1) + baseline
-        pyro.sample("MUAe", dist.Normal(predictions,
-                                        self.log_scale.exp()).to_event(2),
+        pyro.sample("MUAe", dist.Normal(predictions, 0.1).to_event(2),
                     obs=muae.unsqueeze(dim=0))
 
         return predictions
