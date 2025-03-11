@@ -17,25 +17,26 @@ class TrialwiseLinearRegression(base.PyroModel):
         if "repetition" not in self.ablations:
             self.repetition_q_loc = pnn.PyroParam(torch.zeros(1))
             self.repetition_q_log_scale = pnn.PyroParam(torch.zeros(1))
-            self.repetition_p_loc = pnn.PyroParam(torch.zeros(1))
-            self.repetition_p_log_scale = pnn.PyroParam(torch.zeros(1))
+            self.register_buffer("repetition_p_loc", torch.zeros(1))
+            self.register_buffer("repetition_p_log_scale", torch.zeros(1))
 
         self.angle_alpha = pnn.PyroParam(torch.ones(2),
                                          constraint=dist.constraints.simplex)
+        self.register_buffer("angle_concentration", torch.ones(2))
         self.baseline_q = nn.Sequential(
             nn.Linear(num_regressors + 1, hidden_dims), nn.SiLU(),
             nn.Linear(hidden_dims, 2)
         )
-        self.baseline_p_loc = pnn.PyroParam(torch.zeros(1))
-        self.baseline_p_log_scale = pnn.PyroParam(torch.zeros(1))
+        self.register_buffer("baseline_p_loc", torch.zeros(1))
+        self.register_buffer("baseline_p_log_scale", torch.zeros(1))
         self.selectivity_q_loc = pnn.PyroParam(torch.zeros(2))
         self.selectivity_q_log_scale = pnn.PyroParam(torch.zeros(2))
-        self.selectivity_p_loc = pnn.PyroParam(torch.zeros(2))
-        self.selectivity_p_log_scale = pnn.PyroParam(torch.zeros(2))
+        self.register_buffer("selectivity_p_loc", torch.zeros(2))
+        self.register_buffer("selectivity_p_log_scale", torch.zeros(2))
 
         if "surprise" not in self.ablations:
             self.surprise_q_log_scale = pnn.PyroParam(torch.zeros(4))
-            self.surprise_p_log_scale = pnn.PyroParam(torch.zeros(4))
+            self.register_buffer("surprise_p_log_scale", torch.zeros(4))
 
     @property
     def ablations(self):
@@ -80,7 +81,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         # regressors[:, 2] = stimulus repetition count up to current stimulus
         # regressors[:, 3:6] = surprisals
         B = muae.shape[0]
-        concentration = muae.new_ones(torch.Size((B, 2)))
+        concentration = self.angle_concentration.expand(B, 2)
         orientation = pyro.sample("orientation", dist.Dirichlet(concentration))
         P = orientation.shape[0]
 
