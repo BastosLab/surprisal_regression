@@ -146,6 +146,37 @@ class MuaPresentationDataset(IterableDataset):
     def __len__(self):
         return len(self._timeseries)
 
+class SyntheticMuaDataset(IterableDataset):
+    def __init__(self, mat_path):
+        super().__init__()
+        self._regressors, self._samples = torch.load(mat_path)
+
+    def __getitem__(self, idx):
+        if idx < len(self._samples["lo"]):
+            kind = "lo"
+            r = 0
+        elif idx < 2 * len(self._samples["lo"]):
+            idx -= len(self._samples["lo"])
+            kind = "go"
+            r = 1
+        elif idx < 3 * len(self._samples["lo"]):
+            idx -= 2 * len(self._samples["lo"])
+            kind = "rndctrl"
+            r = 2
+        elif idx < 4 * len(self._samples["lo"]):
+            idx -= 3 * len(self._samples["lo"])
+            kind = "seqctrl"
+            r = 3
+
+        return self._samples[kind][idx, :, :], self._regressors[r, :, :]
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def __len__(self):
+        return sum(len(self._samples[type]) for type in self._samples.keys())
+
 class MuaMatDataModule(LightningDataModule):
     def __init__(
         self, data_dir: str, area: str,
@@ -174,6 +205,77 @@ class MuaMatDataModule(LightningDataModule):
         if not self.data_train and not self.data_val and not self.data_test:
             dataset = MuaPresentationDataset(self.hparams.data_dir,
                                              self.hparams.area)
+            self.data_train, self.data_val, self.data_test = random_split(
+                dataset=dataset, lengths=self.hparams.train_val_test_split,
+                generator=torch.Generator().manual_seed(42),
+            )
+
+    def train_dataloader(self) -> DataLoader[Any]:
+        """Create and return the train dataloader.
+
+        :return: The train dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_train,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=True,
+        )
+
+    def val_dataloader(self) -> DataLoader[Any]:
+        """Create and return the validation dataloader.
+
+        :return: The validation dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_val,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
+
+    def test_dataloader(self) -> DataLoader[Any]:
+        """Create and return the test dataloader.
+
+        :return: The test dataloader.
+        """
+        return DataLoader(
+            dataset=self.data_test,
+            batch_size=self.batch_size_per_device,
+            num_workers=self.hparams.num_workers,
+            pin_memory=self.hparams.pin_memory,
+            shuffle=False,
+        )
+
+class SyntheticMuaDataModule(LightningDataModule):
+    def __init__(
+        self, mat_path: str,
+        train_val_test_split: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+        batch_size: int=64, num_workers: int = 0, pin_memory: bool = False
+    ) -> None:
+        super().__init__()
+
+        self.save_hyperparameters(logger=False)
+        self.transforms = transforms.ToTensor()
+
+        self.data_train: Optional[Dataset] = None
+        self.data_val: Optional[Dataset] = None
+        self.data_test: Optional[Dataset] = None
+
+        self.batch_size_per_device = batch_size
+
+    def setup(self, stage: Optional[str] = None) -> None:
+        if self.trainer is not None:
+            if self.hparams.batch_size % self.trainer.world_size != 0:
+                raise RuntimeError(
+                    f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
+                )
+            self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
+
+        if not self.data_train and not self.data_val and not self.data_test:
+            dataset = SyntheticMuaDataset(self.hparams.mat_path)
             self.data_train, self.data_val, self.data_test = random_split(
                 dataset=dataset, lengths=self.hparams.train_val_test_split,
                 generator=torch.Generator().manual_seed(42),

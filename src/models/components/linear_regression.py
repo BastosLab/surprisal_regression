@@ -80,7 +80,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         # regressors[:, 0:1] = one-hot for orientation (0 -> 45, 1 -> 135)
         # regressors[:, 2] = stimulus repetition count up to current stimulus
         # regressors[:, 3:6] = surprisals
-        B = muae.shape[0]
+        B = regressors.shape[0]
         concentration = self.angle_concentration.expand(B, 2)
         orientation = pyro.sample("orientation", dist.Dirichlet(concentration))
         P = orientation.shape[0]
@@ -120,6 +120,6 @@ class TrialwiseLinearRegression(base.PyroModel):
         predictions = torch.linalg.vecdot(coefficients, regressors)
         predictions = predictions.unsqueeze(dim=-1) + baseline
         pyro.sample("MUAe", dist.Normal(predictions, 0.1).to_event(2),
-                    obs=muae.unsqueeze(dim=0))
+                    obs=muae.unsqueeze(dim=0) if muae is not None else None)
 
         return predictions
