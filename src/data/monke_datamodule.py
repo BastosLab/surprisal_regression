@@ -1,6 +1,7 @@
 import glob
 import hdf5storage as mat
 import numpy as np
+import os
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -61,44 +62,34 @@ class MuaTimeseries:
         return self._timestamps
 
 class MuaTimeseriesDataset(IterableDataset):
-    def __init__(self, data_dir, area):
+    def __init__(self, session_path, area):
         super().__init__()
         self._area = area
-        self._files = sorted(glob.glob(data_dir + "/*.mat"))
-        self._num_elements = 0
-        self._session_timeseries = {}
-        self._element_locations = {}
-        for path in self._files:
-            timeseries = MuaTimeseries(path)
-            if self.area in timeseries.muae.keys() and\
-               np.isfinite(timeseries.muae[self.area]).all():
-                self._session_timeseries[path] = timeseries
-                element_range = range(self._num_elements,
-                                      self._num_elements + len(timeseries))
-                self._element_locations[element_range] = path
-                self._num_elements += len(timeseries)
+        path, ext = os.path.splitext(session_path)
+        assert ext == '.mat'
+        assert os.path.isfile(session_path)
+        self._file = session_path
+        self._session = MuaTimeseries(path)
+        assert self.area in self._session.muae.keys()
+        assert np.isfinite(self._session.muae[self.area]).all()
 
     @property
     def area(self):
         return self._area
 
     def __getitem__(self, idx):
-        for indices, path in self._element_locations.items():
-            if idx in indices:
-                idx -= indices.start
-                session = self._session_timeseries[path]
-                muae = session.muae[self.area][:, :, idx]
-                timestamps = session.timestamps[self.area]
-                stim_info = session.stim_info[idx, :, :]
-                stim_times = session.stim_times[idx, :, :]
-                return (muae, timestamps, stim_info, stim_times)
+        muae = self._session.muae[self.area][:, :, idx]
+        timestamps = self._session.timestamps[self.area]
+        stim_info = self._session.stim_info[idx, :, :]
+        stim_times = self._session.stim_times[idx, :, :]
+        return (muae, timestamps, stim_info, stim_times)
 
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
 
     def __len__(self):
-        return self._num_elements
+        return self._session.muae[self.area].shape[-1]
 
 class MuaPresentationDataset(IterableDataset):
     def __init__(self, data_dir, area):
