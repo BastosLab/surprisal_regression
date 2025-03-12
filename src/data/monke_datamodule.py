@@ -92,9 +92,9 @@ class MuaTimeseriesDataset(IterableDataset):
         return self._session.muae[self.area].shape[-1]
 
 class MuaPresentationDataset(IterableDataset):
-    def __init__(self, data_dir, area):
+    def __init__(self, session_path, area):
         super().__init__()
-        self._timeseries = MuaTimeseriesDataset(data_dir, area)
+        self._timeseries = MuaTimeseriesDataset(session_path, area)
 
     def __getitem__(self, idx):
         muae, timestamps, stim_info, stim_times = self._timeseries[idx]
