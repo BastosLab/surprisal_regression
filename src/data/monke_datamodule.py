@@ -170,7 +170,7 @@ class SyntheticMuaDataset(IterableDataset):
 
 class MuaMatDataModule(LightningDataModule):
     def __init__(
-        self, data_dir: str, area: str,
+        self, session_path: str, area: str,
         train_val_test_split: Tuple[float, float, float] = (0.8, 0.1, 0.1),
         batch_size: int=64, num_workers: int = 0, pin_memory: bool = False
     ) -> None:
@@ -194,7 +194,7 @@ class MuaMatDataModule(LightningDataModule):
             self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
 
         if not self.data_train and not self.data_val and not self.data_test:
-            dataset = MuaPresentationDataset(self.hparams.data_dir,
+            dataset = MuaPresentationDataset(self.hparams.session_path,
                                              self.hparams.area)
             self.data_train, self.data_val, self.data_test = random_split(
                 dataset=dataset, lengths=self.hparams.train_val_test_split,
