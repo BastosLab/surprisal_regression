@@ -60,7 +60,7 @@ class SviLightningModule(LightningModule):
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(logger=False)
+        self.save_hyperparameters(logger=False, ignore=['importance'])
 
         self.importance = importance
 
@@ -102,13 +102,12 @@ class SviLightningModule(LightningModule):
             - A tensor of reconstructions.
         """
         xs, targets = batch
+        xs, targets = xs.to(torch.float), targets.to(torch.float)
         P = self.criterion.num_particles
-        with pyro.plate("batch", xs.shape[0]):
-            loss = self.elbo(xs)
+        with pyro.plate_stack("recons", (P, xs.shape[0])):
+            recons, _, log_weights = self.forward(xs, targets)
 
-        with torch.no_grad():
-            with pyro.plate_stack("recons", (P, xs.shape[0])):
-                recons, _, log_weights = self.forward(xs)
+        loss = -log_weights.mean(dim=0).sum()
         return loss, recons, log_weights
 
     def training_step(
@@ -130,7 +129,7 @@ class SviLightningModule(LightningModule):
                  on_step=False, on_epoch=True, prog_bar=True)
 
         # return loss or backpropagation will fail
-        return loss
+        return -base.log_marginal(log_weights).sum()
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Perform a single validation step on a batch of data from the validation set.

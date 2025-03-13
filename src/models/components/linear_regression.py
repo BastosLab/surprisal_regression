@@ -29,9 +29,7 @@ class TrialwiseLinearRegression(base.PyroModel):
         )
         self.register_buffer("baseline_p_loc", torch.zeros(1))
         self.register_buffer("baseline_p_log_scale", torch.zeros(1))
-        self.selectivity_q_loc = pnn.PyroParam(torch.zeros(2))
         self.selectivity_q_log_scale = pnn.PyroParam(torch.zeros(2))
-        self.register_buffer("selectivity_p_loc", torch.zeros(2))
         self.register_buffer("selectivity_p_log_scale", torch.zeros(2))
 
         if "surprise" not in self.ablations:
@@ -50,10 +48,9 @@ class TrialwiseLinearRegression(base.PyroModel):
         orientation = pyro.sample("orientation", dist.Dirichlet(alpha))
         P = orientation.shape[0]
 
-        loc = self.selectivity_q_loc.expand(B, 2)
         log_scale = self.selectivity_q_log_scale.expand(B, 2)
-        selectivity = pyro.sample("selectivity", dist.Normal(
-            loc, log_scale.exp()
+        selectivity = pyro.sample("selectivity", dist.HalfNormal(
+            log_scale.exp()
         ).to_event(1))
 
         if "repetition" in self.ablations:
@@ -85,10 +82,9 @@ class TrialwiseLinearRegression(base.PyroModel):
         orientation = pyro.sample("orientation", dist.Dirichlet(concentration))
         P = orientation.shape[0]
 
-        loc = self.selectivity_p_loc.expand(B, 2)
         log_scale = self.selectivity_p_log_scale.expand(B, 2)
-        selectivity = pyro.sample("selectivity", dist.Normal(
-            loc, log_scale.exp()
+        selectivity = pyro.sample("selectivity", dist.HalfNormal(
+            log_scale.exp()
         ).to_event(1))
 
         if "repetition" in self.ablations:
