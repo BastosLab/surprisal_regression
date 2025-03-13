@@ -1,4 +1,4 @@
-_target_: src.models.monke_module.MonkeLightningModule
+_target_: src.models.svi_module.SviLightningModule
 
 optimizer:
   _target_: torch.optim.Adam
