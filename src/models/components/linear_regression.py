@@ -24,7 +24,8 @@ class TrialwiseLinearRegression(base.PyroModel):
                                          constraint=dist.constraints.simplex)
         self.register_buffer("angle_concentration", torch.ones(2))
         self.baseline_q = nn.Sequential(
-            nn.Linear(num_regressors + 1, hidden_dims), nn.SiLU(),
+            nn.Linear(num_stimuli * (num_regressors + 1), hidden_dims),
+            nn.SiLU(),
             nn.Linear(hidden_dims, 2)
         )
         self.register_buffer("baseline_p_loc", torch.zeros(1))
@@ -68,7 +69,7 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.HalfNormal(log_scale.exp()).to_event(1))
 
-        loc, log_scale = self.baseline_q(data).mean(dim=1).unbind(dim=-1)
+        loc, log_scale = self.baseline_q(data.flatten(-2, -1)).unbind(dim=-1)
         baseline = pyro.sample("baseline", dist.Normal(
             loc.unsqueeze(dim=-1), log_scale.exp().unsqueeze(dim=-1)
         ).to_event(1))
