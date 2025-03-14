@@ -160,6 +160,7 @@ class SviLightningModule(LightningModule):
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/log_evidence", base.log_marginal(log_weights).sum().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
+        return recons
 
     def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
