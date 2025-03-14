@@ -48,7 +48,9 @@ for session in tqdm(SESSIONS, desc='Sessions'):
                                        stderr=subprocess.PIPE,
                                        stdout=subprocess.DEVNULL)
             m = re.search(LOGDIR_RE, completed.stderr.decode('utf-8'))
-            TRAINING_SESSIONS[session][area].append((ablations, m.groups()[0]))
+            if m is not None:
+                m = m.groups()[0]
+            TRAINING_SESSIONS[session][area].append((ablations, m))
 
 with open("TRAINING_SESSIONS.json", "w") as f:
     json.dump(TRAINING_SESSIONS, f)
