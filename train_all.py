@@ -53,4 +53,4 @@ for session in tqdm(SESSIONS, desc='Sessions'):
             TRAINING_SESSIONS[session][area].append((ablations, m))
 
 with open("TRAINING_SESSIONS.json", "w") as f:
-    json.dump(TRAINING_SESSIONS, f)
+    json.dump(TRAINING_SESSIONS, f, indent=4)
