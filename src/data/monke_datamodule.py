@@ -100,7 +100,7 @@ class MuaPresentationDataset(IterableDataset):
         muae, timestamps, stim_info, stim_times = self._timeseries[idx]
         stim_muae = []
         for s in range(1, 5):
-            start, end = stim_times[s, 0], stim_times[s, 1]
+            start, end = stim_times[s, 0], stim_times[s, 1] + 0.075
             start = np.nanargmin(np.abs(timestamps - start))
             end = np.nanargmin(np.abs(timestamps - end))
             stim_avg = muae[:, start:end+1].mean(axis=-1).mean(axis=0,
