@@ -124,7 +124,7 @@ class MuaPresentationDataset(IterableDataset):
                 last = last - 1
         adaptation = adaptation[:, np.newaxis]
 
-        surprisals = stim_info[:, 3]
+        surprisals = stim_info[:, 3, np.newaxis]
 
         muae = np.stack(stim_muae, axis=0).astype(float)
         regressors = np.concatenate((angles, adaptation, surprisals), axis=-1)
