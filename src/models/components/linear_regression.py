@@ -7,7 +7,7 @@ from torch import nn
 from . import pyro as base
 
 class TrialwiseLinearRegression(base.PyroModel):
-    def __init__(self, ablations=[], hidden_dims=128, num_regressors=7,
+    def __init__(self, ablations=[], hidden_dims=128, num_regressors=4,
                  num_stimuli=4):
         super().__init__()
         self._ablations = ablations
