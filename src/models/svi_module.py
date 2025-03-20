@@ -105,10 +105,10 @@ class SviLightningModule(LightningModule):
         xs, targets = xs.to(torch.float), targets.to(torch.float)
         P = self.criterion.num_particles
         with pyro.plate_stack("recons", (P, xs.shape[0])):
-            recons, _, log_weights = self.forward(xs, targets)
+            recons, trace, log_weights = self.forward(xs, targets)
 
         loss = -log_weights.mean(dim=0).sum()
-        return loss, recons, log_weights
+        return loss, recons, log_weights, trace
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -120,7 +120,7 @@ class SviLightningModule(LightningModule):
         :param batch_idx: The index of the current batch.
         :return: A tensor of losses between model predictions and targets.
         """
-        loss, recons, log_weights = self.model_step(batch)
+        loss, recons, log_weights, _ = self.model_step(batch)
 
         # update and log metrics
         self.train_loss(loss)
@@ -138,7 +138,7 @@ class SviLightningModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, recons, log_weights = self.model_step(batch)
+        loss, recons, log_weights, _ = self.model_step(batch)
 
         # update and log metrics
         self.val_loss(loss)
@@ -153,7 +153,7 @@ class SviLightningModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, recons, log_weights = self.model_step(batch)
+        loss, recons, log_weights, _ = self.model_step(batch)
 
         # update and log metrics
         self.test_loss(loss)
