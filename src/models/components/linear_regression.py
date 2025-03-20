@@ -38,8 +38,11 @@ class TrialwiseLinearRegression(base.PyroModel):
             self.register_buffer("surprise_p_concentration", torch.ones(1))
             self.register_buffer("surprise_p_rate", torch.ones(1))
 
-        self.time_q_loc = pnn.PyroParam(torch.zeros(1))
-        self.time_q_log_scale = pnn.PyroParam(torch.zeros(1))
+        self.time_q = nn.Sequential(
+            nn.Linear(num_stimuli * (num_regressors + 1), hidden_dims),
+            nn.SiLU(),
+            nn.Linear(hidden_dims, 2)
+        )
         self.register_buffer("time_p_loc", torch.zeros(1))
         self.register_buffer("time_p_scale", torch.ones(1) * 10)
 
@@ -72,10 +75,10 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.Gamma(concentration, rate).to_event(1))
 
-        loc = self.time_q_loc.expand(B, 1)
-        log_scale = self.time_q_log_scale.expand(B, 1)
-        time = pyro.sample("time", dist.Normal(loc,
-                                               log_scale.exp()).to_event(1))
+        loc, log_scale = self.time_q(data.flatten(-2, -1)).unbind(dim=-1)
+        pyro.sample("time", dist.Normal(
+            loc.unsqueeze(dim=-1), log_scale.exp().unsqueeze(dim=-1)
+        ).to_event(1))
 
     def model(self, muae, regressors):
         # regressors[:, 0:1] = one-hot for orientation (0 -> 45, 1 -> 135)
