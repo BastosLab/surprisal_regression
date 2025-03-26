@@ -9,10 +9,10 @@ import re
 import subprocess
 from tqdm import tqdm
 
-ABLATIONS = ["repetition", "surprise"]
+ABLATIONS = ["repetition", "selectivity", "surprise"]
 ABLATION_SETTINGS = list(itertools.chain(
     itertools.combinations(ABLATIONS, 0), itertools.combinations(ABLATIONS, 1),
-    itertools.combinations(ABLATIONS, 2)
+    itertools.combinations(ABLATIONS, 2), itertools.combinations(ABLATIONS, 3)
 ))
 AREAS_HIERARCHY = ['PFC', 'FEF', 'MST', 'MT', 'V4', 'V3', 'V2', 'V1']
 
