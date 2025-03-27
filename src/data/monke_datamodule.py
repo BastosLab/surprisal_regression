@@ -160,7 +160,9 @@ class SyntheticMuaDataset(IterableDataset):
             kind = "seqctrl"
             r = 3
 
-        return self._samples[kind][idx, :, :], self._regressors[r, :, :]
+        regressor = np.concatenate((self._regressors[r, :, :2],
+                                    self._regressors[r, :, 2:4]), axis=-1)
+        return self._samples[kind][idx, :, :], regressor
 
     def __iter__(self):
         for i in range(len(self)):
