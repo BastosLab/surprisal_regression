@@ -3,7 +3,7 @@ _target_: src.models.svi_module.SviLightningModule
 optimizer:
   _target_: torch.optim.Adam
   _partial_: true
-  lr: 1e-5
+  lr: 1e-3
   weight_decay: 1e-3
 
 scheduler:
@@ -14,9 +14,9 @@ scheduler:
   patience: 10
 
 importance:
-  _target_: src.models.components.linear_regression.TrialwiseLinearRegression
+  _target_: src.models.components.muarnn.MultiunitActivityRnn
   ablations: []
-  num_regressors: 7
+  num_regressors: 4
   num_stimuli: 4
 # compile model for faster training with pytorch 2.0
 compile: false

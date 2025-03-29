@@ -92,15 +92,16 @@ class MuaTimeseriesDataset(IterableDataset):
         return self._session.muae[self.area].shape[-1]
 
 class MuaPresentationDataset(IterableDataset):
-    def __init__(self, session_path, area):
+    def __init__(self, session_path, area, post_offset=0.075):
         super().__init__()
+        self._offset = post_offset
         self._timeseries = MuaTimeseriesDataset(session_path, area)
 
     def __getitem__(self, idx):
         muae, timestamps, stim_info, stim_times = self._timeseries[idx]
         stim_muae = []
         for s in range(1, 5):
-            start, end = stim_times[s, 0], stim_times[s, 1]
+            start, end = stim_times[s, 0], stim_times[s, 1] + self._offset
             start = np.nanargmin(np.abs(timestamps - start))
             end = np.nanargmin(np.abs(timestamps - end))
             stim_avg = muae[:, start:end+1].mean(axis=-1).mean(axis=0,
@@ -124,7 +125,7 @@ class MuaPresentationDataset(IterableDataset):
                 last = last - 1
         adaptation = adaptation[:, np.newaxis]
 
-        surprisals = stim_info[:, 3:]
+        surprisals = stim_info[:, 3, np.newaxis]
 
         muae = np.stack(stim_muae, axis=0).astype(float)
         regressors = np.concatenate((angles, adaptation, surprisals), axis=-1)
@@ -159,7 +160,9 @@ class SyntheticMuaDataset(IterableDataset):
             kind = "seqctrl"
             r = 3
 
-        return self._samples[kind][idx, :, :], self._regressors[r, :, :]
+        regressor = np.concatenate((self._regressors[r, :, :2],
+                                    self._regressors[r, :, 2:4]), axis=-1)
+        return self._samples[kind][idx, :, :], regressor
 
     def __iter__(self):
         for i in range(len(self)):
