@@ -25,12 +25,12 @@ class TrialwiseLinearRegression(base.PyroModel):
                 nn.Linear(hidden_dims, 2), nn.Softplus()
             )
 
-        self.register_buffer("baseline_p_loc", torch.zeros(1))
-        self.register_buffer("baseline_p_log_scale", torch.zeros(1))
+        self.register_buffer("baseline_p_concentration", torch.ones(1))
+        self.register_buffer("baseline_p_rate", torch.ones(1))
         self.baseline_q = nn.Sequential(
             nn.Linear(self._data_dim, hidden_dims),
             nn.SiLU(),
-            nn.Linear(hidden_dims, 2)
+            nn.Linear(hidden_dims, 2), nn.Softplus()
         )
 
         if "selectivity" not in self.ablations:
@@ -60,9 +60,9 @@ class TrialwiseLinearRegression(base.PyroModel):
         B = muae.shape[0]
         data = torch.cat((muae, self.trial_regressors(regressors)),
                          dim=-1).flatten(-2, -1)
-        loc, log_scale = self.baseline_q(data).unbind(dim=-1)
-        baseline = pyro.sample("baseline", dist.Normal(
-            loc.unsqueeze(dim=-1), log_scale.exp().unsqueeze(dim=-1)
+        concentration, rate = (self.baseline_q(data) + 1e-5).unbind(dim=-1)
+        baseline = pyro.sample("baseline", dist.Gamma(
+            concentration.unsqueeze(dim=-1), rate.unsqueeze(dim=-1)
         ).to_event(1))
         P = baseline.shape[0]
 
@@ -88,16 +88,20 @@ class TrialwiseLinearRegression(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.Gamma(concentration, rate).to_event(1))
 
+        # features = self.time_q(data).expand(P, B, 2) + 1e-5
+        # concentration, rate = features[:, :, 0:1], features[:, :, 1:2]
+        # time = pyro.sample("time", dist.Gamma(concentration, rate).to_event(1))
+
     def model(self, muae, regressors):
         # regressors[:, 0:1] = one-hot for orientation (0 -> 45, 1 -> 135)
         # regressors[:, 2] = stimulus repetition count up to current stimulus
         # regressors[:, 3:6] = surprisals
         regressors = self.trial_regressors(regressors)
         B = regressors.shape[0]
-        loc = self.baseline_p_loc.expand(B, 1)
-        log_scale = self.baseline_p_log_scale.expand(B, 1)
+        concentration = self.baseline_p_concentration.expand(B, 1)
+        rate = self.baseline_p_rate.expand(B, 1)
         baseline = pyro.sample("baseline",
-                               dist.Normal(loc, log_scale.exp()).to_event(1))
+                               dist.Gamma(concentration, rate).to_event(1))
         P = baseline.shape[0]
 
         if "repetition" in self.ablations:
