@@ -64,6 +64,13 @@ class MultiunitActivityRnn(base.PyroModel):
             nn.Linear(hidden_dims, 2 * state_dims)
         )
 
+        self.register_buffer("mixture_p_alpha", torch.ones(2))
+        self.mixture_q = nn.Sequential(
+            nn.Linear(num_stimuli * self._data_dim, hidden_dims),
+            nn.SiLU(),
+            nn.Linear(hidden_dims, 2), nn.Softplus()
+        )
+
         if "selectivity" not in self.ablations:
             self.register_buffer("angle_alpha", torch.ones(2))
             self.register_buffer("selectivity_concentration", torch.ones(1))
@@ -103,6 +110,9 @@ class MultiunitActivityRnn(base.PyroModel):
             pyro.sample("adaptation",
                         dist.Gamma(concentration, rate).to_event(1))
 
+        alpha = self.mixture_q(data).expand(P, B, 2) + 1e-5
+        pyro.sample("mixture", dist.Dirichlet(alpha))
+
         if "selectivity" not in self.ablations:
             features = self.selectivity_q(data).expand(P, B, 4)
             alpha = features[:, :, :2] + 1e-5
@@ -128,6 +138,9 @@ class MultiunitActivityRnn(base.PyroModel):
         P = h.shape[0]
         if muae is not None:
             muae = muae.expand(P, B, self._num_stimuli, 1)
+
+        alpha = self.mixture_p_alpha.expand(B, 2)
+        mixture = pyro.sample("mixture", dist.Dirichlet(alpha))
 
         if "selectivity" in self.ablations:
             selectivity = regressors.new_zeros(torch.Size((P, B, 2)))
@@ -167,7 +180,8 @@ class MultiunitActivityRnn(base.PyroModel):
             us = torch.cat((regressions[:, :, p, self.regressor_indices], x),
                            dim=-1)
             h = self.dynamics(us.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
-            x = self.decoder(h)
+            x = mixture[:, :, 0:1] * self.decoder(h) +\
+                mixture[:, :, 1:2] * linear_predictions[:, :, p:p+1]
             predictions.append(x)
             x = pyro.sample("x_%d" % p, dist.Normal(x, 0.1).to_event(1),
                             obs=muae[:, :, p] if muae is not None else None)
