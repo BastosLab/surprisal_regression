@@ -8,6 +8,9 @@ from src.utils import pylogger, rich_utils
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 
+def log_likelihood(trace):
+    return sum(site['log_prob'] for site in trace.nodes.values()
+               if site['type'] == 'sample' and site['is_observed'])
 
 def extras(cfg: DictConfig) -> None:
     """Applies optional utilities before the task is started.
