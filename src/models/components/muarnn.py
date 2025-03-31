@@ -8,19 +8,6 @@ import torch.nn.functional as F
 
 from . import pyro as base
 
-class MonotonicallyDrivenRnnCell(pnn.PyroModule):
-    def __init__(self, input_dims, hidden_dims, constraints):
-        super().__init__()
-        assert constraints.shape == (input_dims, hidden_dims)
-        self.drive = lmn.MonotonicLayer(
-            input_dims, hidden_dims,
-            monotonic_constraints=constraints.to(dtype=torch.float)
-        )
-        self.dynamics = nn.Linear(hidden_dims, hidden_dims)
-
-    def forward(self, input, h):
-        return F.tanh(self.drive(input) + self.dynamics(h))
-
 class MultiunitActivityRnn(base.PyroModel):
     def __init__(self, ablations=[], hidden_dims=128, num_regressors=4,
                  num_stimuli=4, state_dims=10):
@@ -40,9 +27,9 @@ class MultiunitActivityRnn(base.PyroModel):
                 nn.Linear(hidden_dims, 2), nn.Softplus()
             )
 
-        self.decoder = lmn.MonotonicLayer(
-            state_dims, 1,
-            monotonic_constraints=torch.tensor([[1.] * state_dims]).T
+        self.decoder = nn.Sequential(
+            nn.Linear(state_dims, hidden_dims), nn.SiLU(),
+            nn.Linear(hidden_dims, 1),
         )
         monotonicity = []
         if "selectivity" not in self.ablations:
@@ -52,10 +39,7 @@ class MultiunitActivityRnn(base.PyroModel):
         if "surprise" not in self.ablations:
             monotonicity.append(1)
         monotonicity.append(0)
-        self.dynamics = MonotonicallyDrivenRnnCell(
-            self._data_dim, state_dims,
-            torch.tensor([monotonicity] * state_dims).T
-        )
+        self.dynamics = nn.RNNCell(self._data_dim, state_dims)
         self.register_buffer("h_init_loc", torch.zeros(state_dims))
         self.register_buffer("h_init_scale", torch.ones(state_dims))
         self.h_init_q = nn.Sequential(
@@ -131,6 +115,7 @@ class MultiunitActivityRnn(base.PyroModel):
         # regressors[:, 0:1] = one-hot for orientation (0 -> 45, 1 -> 135)
         # regressors[:, 2] = stimulus repetition count up to current stimulus
         # regressors[:, 3:6] = surprisals
+        regressors = regressors[:, :, self.regressor_indices]
         B = regressors.shape[0]
         loc = self.h_init_loc.expand(B, -1)
         scale = self.h_init_scale.expand(B, -1)
@@ -170,15 +155,16 @@ class MultiunitActivityRnn(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.Gamma(concentration, rate).to_event(1))
 
-        coefficients = torch.cat((selectivity, -adaptation, surprise), dim=-1)
+        coefficients = torch.cat((selectivity, -adaptation, surprise),
+                                 dim=-1)[:, :, self.regressor_indices]
         regressors = regressors.expand(P, *regressors.shape)
-        regressions = coefficients.unsqueeze(dim=-2) * regressors
+        coefficients = coefficients.unsqueeze(-2).expand(*regressors.shape)
+        linear_predictions = torch.linalg.vecdot(coefficients, regressors)
 
         predictions = []
         x = regressors.new_zeros(torch.Size((P, B, 1)))
         for p in range(self._num_stimuli):
-            us = torch.cat((regressions[:, :, p, self.regressor_indices], x),
-                           dim=-1)
+            us = torch.cat((regressors[:, :, p], x), dim=-1)
             h = self.dynamics(us.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
             x = mixture[:, :, 0:1] * self.decoder(h) +\
                 mixture[:, :, 1:2] * linear_predictions[:, :, p:p+1]
