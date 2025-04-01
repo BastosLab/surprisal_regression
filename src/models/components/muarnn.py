@@ -18,28 +18,18 @@ class MultiunitActivityRnn(base.PyroModel):
         self._state_dims = state_dims
         self._data_dim = num_regressors - len(self.ablations) + 1
 
-        if "repetition" not in self.ablations:
-            self.register_buffer("adaptation_concentration", torch.ones(1))
-            self.register_buffer("adaptation_rate", torch.ones(1))
-            self.adaptation_q = nn.Sequential(
-                nn.Linear(num_stimuli * self._data_dim, hidden_dims),
-                nn.SiLU(),
-                nn.Linear(hidden_dims, 2), nn.Softplus()
-            )
-
-        self.decoder = nn.Sequential(
-            nn.Linear(state_dims, hidden_dims), nn.SiLU(),
-            nn.Linear(hidden_dims, 1),
-        )
         monotonicity = []
         if "selectivity" not in self.ablations:
-            monotonicity = monotonicity + [1, 1]
+            monotonicity = monotonicity + [0., 0.]
         if "repetition" not in self.ablations:
             monotonicity.append(-1)
         if "surprise" not in self.ablations:
             monotonicity.append(1)
-        monotonicity.append(0)
-        self.dynamics = nn.RNNCell(self._data_dim, state_dims)
+        self.decoder = lmn.MonotonicLayer(
+            num_regressors - len(self.ablations) + state_dims, 1,
+            monotonic_constraints=torch.tensor(monotonicity + [1.] * state_dims)
+        )
+        self.dynamics = nn.GRUCell(1, state_dims)
         self.register_buffer("h_init_loc", torch.zeros(state_dims))
         self.register_buffer("h_init_scale", torch.ones(state_dims))
         self.h_init_q = nn.Sequential(
@@ -47,32 +37,6 @@ class MultiunitActivityRnn(base.PyroModel):
             nn.SiLU(),
             nn.Linear(hidden_dims, 2 * state_dims)
         )
-
-        self.register_buffer("mixture_p_alpha", torch.ones(2))
-        self.mixture_q = nn.Sequential(
-            nn.Linear(num_stimuli * self._data_dim, hidden_dims),
-            nn.SiLU(),
-            nn.Linear(hidden_dims, 2), nn.Softplus()
-        )
-
-        if "selectivity" not in self.ablations:
-            self.register_buffer("angle_alpha", torch.ones(2))
-            self.register_buffer("selectivity_concentration", torch.ones(1))
-            self.register_buffer("selectivity_rate", torch.ones(1))
-            self.selectivity_q = nn.Sequential(
-                nn.Linear(num_stimuli * self._data_dim, hidden_dims),
-                nn.SiLU(),
-                nn.Linear(hidden_dims, 4), nn.Softplus()
-            )
-
-        if "surprise" not in self.ablations:
-            self.register_buffer("surprise_concentration", torch.ones(1))
-            self.register_buffer("surprise_rate", torch.ones(1))
-            self.surprise_q = nn.Sequential(
-                nn.Linear(num_stimuli * self._data_dim, hidden_dims),
-                nn.SiLU(),
-                nn.Linear(hidden_dims, 2), nn.Softplus()
-            )
 
     @property
     def ablations(self):
@@ -106,9 +70,8 @@ class MultiunitActivityRnn(base.PyroModel):
         predictions = []
         x = regressors.new_zeros(torch.Size((P, B, 1)))
         for p in range(self._num_stimuli):
-            us = torch.cat((regressors[:, :, p], x), dim=-1)
-            h = self.dynamics(us.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
-            x = self.decoder(h)
+            h = self.dynamics(x.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
+            x = self.decoder(torch.cat((regressors[:, :, p], h), dim=-1))
             predictions.append(x)
             x = pyro.sample("x_%d" % p, dist.Normal(x, 0.1).to_event(1),
                             obs=muae[:, :, p] if muae is not None else None)
