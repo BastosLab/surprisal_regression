@@ -128,7 +128,7 @@ class SviLightningModule(LightningModule):
         self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("train/log_evidence", base.log_marginal(log_weights).sum().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/log_likelihood", utils.log_likelihood(trace).sum().item(),
+        self.log("train/log_likelihood", utils.log_likelihood(trace).mean().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
 
         # return loss or backpropagation will fail
@@ -148,7 +148,7 @@ class SviLightningModule(LightningModule):
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("val/log_evidence", base.log_marginal(log_weights).sum().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/log_likelihood", utils.log_likelihood(trace).sum().item(),
+        self.log("val/log_likelihood", utils.log_likelihood(trace).mean().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
@@ -165,7 +165,7 @@ class SviLightningModule(LightningModule):
         self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log("test/log_evidence", base.log_marginal(log_weights).sum().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/log_likelihood", utils.log_likelihood(trace).sum().item(),
+        self.log("test/log_likelihood", utils.log_likelihood(trace).mean().item(),
                  on_step=False, on_epoch=True, prog_bar=True)
         return recons
 
