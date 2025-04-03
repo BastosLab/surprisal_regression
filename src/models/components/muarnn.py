@@ -27,7 +27,7 @@ class MultiunitActivityRnn(base.PyroModel):
             monotonicity.append(1)
         self.decoder = lmn.MonotonicLayer(
             num_regressors - len(self.ablations) + state_dims, 1,
-            monotonic_constraints=torch.tensor(monotonicity + [1.] * state_dims)
+            monotonic_constraints=torch.tensor(monotonicity + [0.] * state_dims)
         )
         self.dynamics = nn.GRUCell(1, state_dims)
         self.register_buffer("h_init_loc", torch.zeros(state_dims))
