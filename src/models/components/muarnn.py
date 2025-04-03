@@ -46,10 +46,11 @@ class MultiunitActivityRnn(base.PyroModel):
         B = muae.shape[0]
         data = torch.cat((muae, regressors[:, :, self.regressor_indices]),
                          dim=-1).flatten(-2, -1)
-        loc, log_scale = self.h_init_q(data).view(
+        loc, scale = self.h_init_q(data).view(
             -1, self._state_dims, 2
         ).unbind(dim=-1)
-        h = pyro.sample("h0", dist.Normal(loc, log_scale.exp()).to_event(1))
+        h = pyro.sample("h0", dist.Normal(loc,
+                                          F.softplus(scale) + 1e-5).to_event(1))
         P = h.shape[0]
 
     def model(self, muae, regressors):
