@@ -92,8 +92,10 @@ class MuaTimeseriesDataset(IterableDataset):
         return self._session.muae[self.area].shape[-1]
 
 class MuaPresentationDataset(IterableDataset):
-    def __init__(self, session_path, area, post_offset=0.075):
+    def __init__(self, session_path, area, feedforward_offset=None,
+                 post_offset=0.075):
         super().__init__()
+        self._feedforward = feedforward_offset
         self._offset = post_offset
         self._timeseries = MuaTimeseriesDataset(session_path, area)
 
@@ -102,6 +104,8 @@ class MuaPresentationDataset(IterableDataset):
         stim_muae = []
         for s in range(1, 5):
             start, end = stim_times[s, 0], stim_times[s, 1] + self._offset
+            if self._feedforward is not None:
+                end = start + self._feedforward
             start = np.nanargmin(np.abs(timestamps - start))
             end = np.nanargmin(np.abs(timestamps - end))
             stim_avg = muae[:, start:end+1].mean(axis=-1).mean(axis=0,
