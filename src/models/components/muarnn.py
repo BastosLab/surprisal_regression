@@ -22,7 +22,7 @@ class MultiunitActivityRnn(base.PyroModel):
         if "selectivity" not in self.ablations:
             monotonicity = monotonicity + [0., 0.]
         if "repetition" not in self.ablations:
-            monotonicity.append(-1)
+            monotonicity.append(0.)
         if "surprise" not in self.ablations:
             monotonicity.append(1)
         self.decoder = lmn.MonotonicLayer(
