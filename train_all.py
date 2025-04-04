@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import functools
 import glob
 import hdf5storage as mat
 import itertools
@@ -43,7 +44,7 @@ def session_areas(session):
         if area in AREAS_HIERARCHY:
             yield area
 
-def train_ablation(ablations):
+def train_ablation(session_spec, area_spec, ablations):
     ablation_spec = 'model.importance.ablations=%s' % str(list(ablations))
     completed = subprocess.run(['python', 'src/train.py', session_spec,
                                 area_spec, ablation_spec],
@@ -63,13 +64,17 @@ for session in tqdm(SESSIONS, desc='Sessions'):
         TRAINING_SESSIONS[session][area] = []
         if PARALLELIZE:
             with multiprocessing.Pool(4) as pool:
-                outputs = pool.map(train_ablation, ABLATION_SETTINGS)
+                train = functools.partial(train_ablation, session_spec,
+                                          area_spec)
+                outputs = pool.map(train, ABLATION_SETTINGS)
                 for (ablations, (l, e)) in zip(ABLATION_SETTINGS, outputs):
                     TRAINING_SESSIONS[session][area].append((ablations, l, e))
         else:
             for ablations in tqdm(ABLATION_SETTINGS, desc='Ablations', leave=False):
-                (logdir, evidence) = train_ablation(ablations)
-                TRAINING_SESSIONS[session][area].append((ablations, logdir, evidence))
+                (logdir, evidence) = train_ablation(session_spec, area_spec,
+                                                    ablations)
+                TRAINING_SESSIONS[session][area].append((ablations, logdir,
+                                                         evidence))
         if all(TRAINING_SESSIONS[session][area][k][2] is not None for
                k in range(len(ABLATION_SETTINGS))):
             TRAINING_SESSIONS[session][area].append(
