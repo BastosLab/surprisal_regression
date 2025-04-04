@@ -22,12 +22,12 @@ class MultiunitActivityRnn(base.PyroModel):
         if "selectivity" not in self.ablations:
             monotonicity = monotonicity + [0., 0.]
         if "repetition" not in self.ablations:
-            monotonicity.append(-1)
+            monotonicity.append(0.)
         if "surprise" not in self.ablations:
             monotonicity.append(1)
         self.decoder = lmn.MonotonicLayer(
             num_regressors - len(self.ablations) + state_dims, 1,
-            monotonic_constraints=torch.tensor(monotonicity + [1.] * state_dims)
+            monotonic_constraints=torch.tensor(monotonicity + [0.] * state_dims)
         )
         self.dynamics = nn.GRUCell(1, state_dims)
         self.register_buffer("h_init_loc", torch.zeros(state_dims))
@@ -46,10 +46,11 @@ class MultiunitActivityRnn(base.PyroModel):
         B = muae.shape[0]
         data = torch.cat((muae, regressors[:, :, self.regressor_indices]),
                          dim=-1).flatten(-2, -1)
-        loc, log_scale = self.h_init_q(data).view(
+        loc, scale = self.h_init_q(data).view(
             -1, self._state_dims, 2
         ).unbind(dim=-1)
-        h = pyro.sample("h0", dist.Normal(loc, log_scale.exp()).to_event(1))
+        h = pyro.sample("h0", dist.Normal(loc,
+                                          F.softplus(scale) + 1e-5).to_event(1))
         P = h.shape[0]
 
     def model(self, muae, regressors):

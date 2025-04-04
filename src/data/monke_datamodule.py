@@ -92,8 +92,10 @@ class MuaTimeseriesDataset(IterableDataset):
         return self._session.muae[self.area].shape[-1]
 
 class MuaPresentationDataset(IterableDataset):
-    def __init__(self, session_path, area, post_offset=0.075):
+    def __init__(self, session_path, area, feedforward_offset=None,
+                 post_offset=0.075):
         super().__init__()
+        self._feedforward = feedforward_offset
         self._offset = post_offset
         self._timeseries = MuaTimeseriesDataset(session_path, area)
 
@@ -102,6 +104,8 @@ class MuaPresentationDataset(IterableDataset):
         stim_muae = []
         for s in range(1, 5):
             start, end = stim_times[s, 0], stim_times[s, 1] + self._offset
+            if self._feedforward is not None:
+                end = start + self._feedforward
             start = np.nanargmin(np.abs(timestamps - start))
             end = np.nanargmin(np.abs(timestamps - end))
             stim_avg = muae[:, start:end+1].mean(axis=-1).mean(axis=0,
@@ -174,6 +178,7 @@ class SyntheticMuaDataset(IterableDataset):
 class MuaMatDataModule(LightningDataModule):
     def __init__(
         self, session_path: str, area: str, post_offset: float=0.075,
+        feedforward_offset: Optional[float]=None,
         train_val_split: Tuple[float, float, float] = (0.8, 0.2),
         batch_size: int=64, num_workers: int = 0, pin_memory: bool = False
     ) -> None:
@@ -199,6 +204,7 @@ class MuaMatDataModule(LightningDataModule):
         if not self.data_train and not self.data_val and not self.data_test:
             dataset = MuaPresentationDataset(self.hparams.session_path,
                                              self.hparams.area,
+                                             self.hparams.feedforward_offset,
                                              self.hparams.post_offset)
             self.data_train, self.data_val = random_split(
                 dataset=dataset, lengths=self.hparams.train_val_split,
