@@ -1,5 +1,5 @@
-_target_: src.data.monke_datamodule.MuaMatDataModule
-session_path:  ???
+_target_: src.data.monke_datamodule.PooledMuaMatDataModule
+sessions_path:  ???
 area: ???
 feedforward_offset: 0.150
 post_offset: 0.075
