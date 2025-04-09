@@ -29,7 +29,7 @@ class MultiunitActivityRnn(base.PyroModel):
             num_regressors - len(self.ablations) + state_dims, 1,
             monotonic_constraints=torch.tensor(monotonicity + [0.] * state_dims)
         )
-        self.dynamics = nn.GRUCell(1, state_dims)
+        self.dynamics = nn.GRUCell(self.num_regressors + 1, state_dims)
         self.register_buffer("h_init_loc", torch.zeros(state_dims))
         self.register_buffer("h_init_scale", torch.ones(state_dims))
         self.h_init_q = nn.Sequential(
@@ -69,13 +69,14 @@ class MultiunitActivityRnn(base.PyroModel):
                                        self.num_regressors)
 
         predictions = []
-        x = regressors.new_zeros(torch.Size((P, B, 1)))
         for p in range(self._num_stimuli):
-            h = self.dynamics(x.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
             x = self.decoder(torch.cat((regressors[:, :, p], h), dim=-1))
             predictions.append(x)
             x = pyro.sample("x_%d" % p, dist.Normal(x, 0.1).to_event(1),
                             obs=muae[:, :, p] if muae is not None else None)
+
+            us = torch.cat((regressors[:, :, p], x), dim=-1)
+            h = self.dynamics(us.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
 
         return torch.stack(predictions, dim=-2)
 
