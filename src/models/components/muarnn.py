@@ -9,10 +9,11 @@ import torch.nn.functional as F
 from . import pyro as base
 
 class MultiunitActivityRnn(base.PyroModel):
-    def __init__(self, ablations=[], hidden_dims=128, num_regressors=4,
-                 num_stimuli=4, state_dims=32):
+    def __init__(self, ablations=[], hidden_dims=128, num_channels=1,
+                 num_regressors=4, num_stimuli=4, state_dims=10):
         super().__init__()
         self._ablations = ablations
+        self._num_channels = num_channels
         self._num_regressors = num_regressors
         self._num_stimuli = num_stimuli
         self._state_dims = state_dims
@@ -79,6 +80,10 @@ class MultiunitActivityRnn(base.PyroModel):
             h = self.dynamics(us.flatten(0, 1), h.flatten(0, 1)).view(P, B, -1)
 
         return torch.stack(predictions, dim=-2)
+
+    @property
+    def num_channels(self):
+        return self._num_channels
 
     @property
     def num_regressors(self):
