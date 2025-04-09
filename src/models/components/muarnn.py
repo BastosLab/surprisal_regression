@@ -10,23 +10,23 @@ from . import pyro as base
 
 class MultiunitActivityRnn(base.PyroModel):
     def __init__(self, ablations=[], hidden_dims=128, num_regressors=4,
-                 num_stimuli=4, state_dims=10):
+                 num_stimuli=4, state_dims=32):
         super().__init__()
         self._ablations = ablations
         self._num_regressors = num_regressors
         self._num_stimuli = num_stimuli
         self._state_dims = state_dims
-        self._data_dim = num_regressors - len(self.ablations) + 1
+        self._data_dim = self.num_regressors + 1
 
         monotonicity = []
         if "selectivity" not in self.ablations:
             monotonicity = monotonicity + [0., 0.]
         if "repetition" not in self.ablations:
-            monotonicity.append(0.)
+            monotonicity.append(1.)
         if "surprise" not in self.ablations:
             monotonicity.append(1)
         self.decoder = lmn.MonotonicLayer(
-            num_regressors - len(self.ablations) + state_dims, 1,
+            self.num_regressors + state_dims, 1,
             monotonic_constraints=torch.tensor(monotonicity + [0.] * state_dims)
         )
         self.dynamics = nn.GRUCell(self.num_regressors + 1, state_dims)
@@ -82,7 +82,7 @@ class MultiunitActivityRnn(base.PyroModel):
 
     @property
     def num_regressors(self):
-        return self._num_regressors - len(self.ablations)
+        return len(self.regressor_indices)
 
     @property
     def regressor_indices(self):
