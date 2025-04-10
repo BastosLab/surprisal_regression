@@ -56,35 +56,32 @@ def train_ablation(session_spec, area_spec, ablations):
     evidence = float(m.groups()[-1]) if m is not None else None
     return (logdir, evidence)
 
-for session in tqdm(SESSIONS, desc='Sessions'):
-    session_spec = 'data.session_path=%s' % session
-    TRAINING_SESSIONS[session] = {}
-    for area in tqdm(session_areas(session), desc='Areas', leave=False):
-        area_spec = 'data.area=%s' % area
-        TRAINING_SESSIONS[session][area] = []
-        if PARALLELIZE:
-            with multiprocessing.Pool(4) as pool:
-                train = functools.partial(train_ablation, session_spec,
-                                          area_spec)
-                outputs = pool.map(train, ABLATION_SETTINGS)
-                for (ablations, (l, e)) in zip(ABLATION_SETTINGS, outputs):
-                    TRAINING_SESSIONS[session][area].append((ablations, l, e))
-        else:
-            for ablations in tqdm(ABLATION_SETTINGS, desc='Ablations', leave=False):
-                (logdir, evidence) = train_ablation(session_spec, area_spec,
-                                                    ablations)
-                TRAINING_SESSIONS[session][area].append((ablations, logdir,
-                                                         evidence))
-        if all(TRAINING_SESSIONS[session][area][k][2] is not None for
-               k in range(len(ABLATION_SETTINGS))):
-            TRAINING_SESSIONS[session][area].append(
-                logmeanexp(TRAINING_SESSIONS[session][area][0][2],
-                           TRAINING_SESSIONS[session][area][1][2]).item() -
-                logmeanexp(TRAINING_SESSIONS[session][area][2][2],
-                           TRAINING_SESSIONS[session][area][3][2]).item()
-            )
-        else:
-            TRAINING_SESSIONS[session][area].append(None)
+session_spec = 'data.sessions_path=%s' % SESSION_DIR
+for area in tqdm(AREAS_HIERARCHY, desc='Areas', leave=False):
+    area_spec = 'data.area=%s' % area
+    TRAINING_SESSIONS[area] = []
+    if PARALLELIZE:
+        with multiprocessing.Pool(4) as pool:
+            train = functools.partial(train_ablation, session_spec,
+                                      area_spec)
+            outputs = pool.map(train, ABLATION_SETTINGS)
+            for (ablations, (l, e)) in zip(ABLATION_SETTINGS, outputs):
+                TRAINING_SESSIONS[area].append((ablations, l, e))
+    else:
+        for ablations in tqdm(ABLATION_SETTINGS, desc='Ablations', leave=False):
+            (logdir, evidence) = train_ablation(session_spec, area_spec,
+                                                ablations)
+            TRAINING_SESSIONS[area].append((ablations, logdir, evidence))
+    if all(TRAINING_SESSIONS[area][k][2] is not None for
+           k in range(len(ABLATION_SETTINGS))):
+        TRAINING_SESSIONS[area].append(
+            logmeanexp(TRAINING_SESSIONS[area][0][2],
+                       TRAINING_SESSIONS[area][1][2]).item() -
+            logmeanexp(TRAINING_SESSIONS[area][2][2],
+                       TRAINING_SESSIONS[area][3][2]).item()
+        )
+    else:
+        TRAINING_SESSIONS[area].append(None)
 
 with open("TRAINING_SESSIONS.json", "w") as f:
     json.dump(TRAINING_SESSIONS, f, indent=4)
