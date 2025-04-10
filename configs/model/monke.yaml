@@ -14,7 +14,7 @@ scheduler:
   patience: 10
 
 importance:
-  _target_: src.models.components.muarnn.MultiunitActivityRnn
+  _target_: src.models.components.ar.MuaAutoRegression
   ablations: []
   num_regressors: 4
   num_stimuli: 4
