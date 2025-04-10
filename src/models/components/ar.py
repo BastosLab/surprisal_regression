@@ -12,7 +12,7 @@ class MuaAutoRegression(base.PyroModel):
                  num_regressors=4, num_stimuli=4):
         super().__init__()
         self._ablations = ablations
-        self._num_channels = 1
+        self._num_channels = num_channels
         self._num_regressors = num_regressors
         self._num_stimuli = num_stimuli
         self._data_dim = self._num_stimuli * (self.num_regressors +\
@@ -26,7 +26,7 @@ class MuaAutoRegression(base.PyroModel):
             self.repetition_q = nn.Sequential(
                 nn.Linear(self._data_dim, hidden_dims),
                 nn.SiLU(),
-                nn.Linear(hidden_dims, 2),
+                nn.Linear(hidden_dims, self.num_channels * 2),
             )
 
         self.register_buffer("x0_loc", torch.zeros(1))
@@ -38,13 +38,12 @@ class MuaAutoRegression(base.PyroModel):
         )
 
         if "selectivity" not in self.ablations:
-            self.register_buffer("angle_p_alpha", torch.ones(2))
-            self.register_buffer("selectivity_p_concentration", torch.ones(1))
-            self.register_buffer("selectivity_p_rate", torch.ones(1))
+            self.register_buffer("selectivity_p_concentration", torch.ones(2))
+            self.register_buffer("selectivity_p_rate", torch.ones(2))
             self.selectivity_q = nn.Sequential(
                 nn.Linear(self._data_dim, hidden_dims),
                 nn.SiLU(),
-                nn.Linear(hidden_dims, 4), nn.Softplus()
+                nn.Linear(hidden_dims, 2 * 2 * self.num_channels), nn.Softplus()
             )
 
         if "surprise" not in self.ablations:
@@ -53,7 +52,7 @@ class MuaAutoRegression(base.PyroModel):
             self.surprise_q = nn.Sequential(
                 nn.Linear(self._data_dim, hidden_dims),
                 nn.SiLU(),
-                nn.Linear(hidden_dims, 2), nn.Softplus()
+                nn.Linear(hidden_dims, self.num_channels * 2), nn.Softplus()
             )
 
     @property
@@ -72,13 +71,10 @@ class MuaAutoRegression(base.PyroModel):
 
         if "selectivity" not in self.ablations:
             features = self.selectivity_q(data).expand(P, B, 4) + 1e-5
-            alpha = features[:, :, :2]
-            orientation = pyro.sample("orientation", dist.Dirichlet(alpha))
-
-            concentration, rate = features[:, :, 2:3], features[:, :, 3:4]
-            selectivity = orientation * pyro.sample(
-                "selectivity", dist.Gamma(concentration, rate).to_event(1)
-            )
+            concentration, rate = features[:, :, :2], features[:, :, 2:]
+            selectivity = pyro.sample("selectivity",
+                                      dist.Gamma(concentration,
+                                                 rate).to_event(1))
 
         if "repetition" not in self.ablations:
             features = self.repetition_q(data).expand(P, B, 2)
@@ -100,6 +96,8 @@ class MuaAutoRegression(base.PyroModel):
         loc, scale = self.x0_loc.expand(B, 1), self.x0_scale.expand(B, 1)
         x = pyro.sample("x0", dist.Normal(loc, scale).to_event(1))
         P = x.shape[0]
+        if muae is not None:
+            muae = muae.expand(P, B, self._num_stimuli, 1)
 
         if "repetition" in self.ablations:
             repetition = regressors.new_zeros(torch.Size((P, B, 1)))
@@ -112,14 +110,11 @@ class MuaAutoRegression(base.PyroModel):
         if "selectivity" in self.ablations:
             selectivity = regressors.new_zeros(torch.Size((P, B, 2)))
         else:
-            alpha = self.angle_p_alpha.expand(B, 2)
-            orientation = pyro.sample("orientation", dist.Dirichlet(alpha))
-
-            concentration = self.selectivity_p_concentration.expand(B, 1)
-            rate = self.selectivity_p_rate.expand(B, 1)
-            selectivity = orientation * pyro.sample(
-                "selectivity", dist.Gamma(concentration, rate).to_event(1)
-            )
+            concentration = self.selectivity_p_concentration.expand(B, 2)
+            rate = self.selectivity_p_rate.expand(B, 2)
+            selectivity = pyro.sample("selectivity",
+                                      dist.Gamma(concentration,
+                                                 rate).to_event(1))
 
         if "surprise" in self.ablations:
             surprise = regressors.new_zeros(torch.Size((P, B, 1)))
@@ -129,7 +124,7 @@ class MuaAutoRegression(base.PyroModel):
             surprise = pyro.sample("surprise",
                                    dist.Gamma(concentration, rate).to_event(1))
 
-        coefficients = torch.cat((orientation * selectivity, -adaptation,
+        coefficients = torch.cat((selectivity, repetition,
                                   surprise), dim=-1)[:,:,self.regressor_indices]
         regressors = regressors.expand(P, *regressors.shape)
         coefficients = coefficients.unsqueeze(-2).expand(*regressors.shape)
@@ -142,7 +137,7 @@ class MuaAutoRegression(base.PyroModel):
             x = pyro.sample("x_%d" % p, dist.Normal(x, 0.1).to_event(1),
                             obs=muae[:, :, p] if muae is not None else None)
 
-        return predictions
+        return torch.stack(predictions, dim=-2)
 
     @property
     def num_channels(self):
